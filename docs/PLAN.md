@@ -15,25 +15,25 @@ frontend.
 
 ## Decisions (locked)
 
-| Area | Decision |
-|------|----------|
-| SDK | Temporal **TypeScript** SDK (matches this ES-module repo) |
-| App shape | Multi-step agent with **signals + queries** (human-in-the-loop) |
-| AI backend | **Mocked** (pure functions in `domain/`), offline |
-| Codebase | **Single package**, DDD layers as folders, two entrypoints (worker, client) |
-| TypeScript | `strict` via **`@tsconfig/strictest`**, `moduleResolution: Bundler`, ESNext |
-| Lint | **ESLint v9** flat config + `typescript-eslint` (type-aware) |
-| Format | **Prettier** — sole formatter; `eslint-config-prettier` disables ESLint's formatting rules so the two don't fight |
-| Tests | **Vitest** + `@temporalio/testing` (time-skipping, mocked activities) |
-| Local cluster | **`temporal server start-dev`** (single dev-server, in-memory) |
-| Docker | Compose: single **start-dev** container + our **worker** + one-shot **client** |
-| Config | **`.env` + `.env.local`** (both git-ignored) + committed `.env.example`; loaded once in a typed config module with built-in defaults |
-| Validation | **Zod at the edges** — env, workflow input, signal payloads, HTTP requests schema-validated; types inferred from schemas. Internal layer contracts stay plain TS interfaces |
-| HTTP API | **Fastify** driving adapter (a Temporal *client*) exposing a full HITL REST API; `@fastify/cors` + `@fastify/helmet`; zod request validation |
-| Logging | **pino** (structured). Fastify uses it natively; worker/activities/CLI use a shared pino instance. Workflows log via `@temporalio/workflow` `log` (sinks), never pino directly |
-| HTTP client | Node built-in **`undici`** (global `fetch`) — no dependency; available to activities if a tool ever makes a real call |
-| Git hooks | **husky** — `commit-msg` → **commitlint** (`@commitlint/config-conventional`); `pre-commit` → `lint` + `build` (typecheck) |
-| Principles | Clean / **SOLID** / **DDD** / **DRY** / **KISS** — see [`SPEC.md` §Principles](./SPEC.md) for the concrete rules |
+| Area          | Decision                                                                                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SDK           | Temporal **TypeScript** SDK (matches this ES-module repo)                                                                                                                      |
+| App shape     | Multi-step agent with **signals + queries** (human-in-the-loop)                                                                                                                |
+| AI backend    | **Mocked** (pure functions in `domain/`), offline                                                                                                                              |
+| Codebase      | **Single package**, DDD layers as folders, two entrypoints (worker, client)                                                                                                    |
+| TypeScript    | `strict` via **`@tsconfig/strictest`**, `moduleResolution: Bundler`, ESNext                                                                                                    |
+| Lint          | **ESLint v9** flat config + `typescript-eslint` (type-aware)                                                                                                                   |
+| Format        | **Prettier** — sole formatter; `eslint-config-prettier` disables ESLint's formatting rules so the two don't fight                                                              |
+| Tests         | **Vitest** + `@temporalio/testing` (time-skipping, mocked activities)                                                                                                          |
+| Local cluster | **`temporal server start-dev`** (single dev-server, in-memory)                                                                                                                 |
+| Docker        | Compose: single **start-dev** container + our **worker** + one-shot **client**                                                                                                 |
+| Config        | **`.env` + `.env.local`** (both git-ignored) + committed `.env.example`; loaded once in a typed config module with built-in defaults                                           |
+| Validation    | **Zod at the edges** — env, workflow input, signal payloads, HTTP requests schema-validated; types inferred from schemas. Internal layer contracts stay plain TS interfaces    |
+| HTTP API      | **Fastify** driving adapter (a Temporal _client_) exposing a full HITL REST API; `@fastify/cors` + `@fastify/helmet`; zod request validation                                   |
+| Logging       | **pino** (structured). Fastify uses it natively; worker/activities/CLI use a shared pino instance. Workflows log via `@temporalio/workflow` `log` (sinks), never pino directly |
+| HTTP client   | Node built-in **`undici`** (global `fetch`) — no dependency; available to activities if a tool ever makes a real call                                                          |
+| Git hooks     | **husky** — `commit-msg` → **commitlint** (`@commitlint/config-conventional`); `pre-commit` → `lint` + `build` (typecheck)                                                     |
+| Principles    | Clean / **SOLID** / **DDD** / **DRY** / **KISS** — see [`SPEC.md` §Principles](./SPEC.md) for the concrete rules                                                               |
 
 ## Architecture (layered DDD)
 
@@ -87,7 +87,7 @@ adapter implements the port and delegates the mocked reasoning to `domain/agent.
 **Where the workflow runs:** there is no "workflow container." Workflow code is hosted by
 the **worker**, which runs both workflow and activity functions. The `temporal` container
 is the cluster (orchestration + durable history + Web UI). Clients (the CLI, the **HTTP
-API**, the Web UI) only *start/poke* workflows via a Temporal Client — they never host
+API**, the Web UI) only _start/poke_ workflows via a Temporal Client — they never host
 workflow code.
 
 **Three ways to drive HITL:** Temporal Web UI (`:8233`), Temporal CLI, and our **Fastify
@@ -121,20 +121,20 @@ change.
 
 ## Tooling / scripts
 
-| script | command | purpose |
-|--------|---------|---------|
-| `worker` | `tsx src/infra/worker.ts` | run the worker (long-lived) |
-| `api` | `tsx src/interfaces/http/server.ts` | run the Fastify HITL REST API (long-lived) |
-| `start` | `tsx src/interfaces/cli/client.ts` | start a workflow, print id, exit |
-| `build` | `tsc` | strict typecheck / emit to `dist/` |
-| `lint` | `eslint .` | ESLint v9 flat config |
-| `format` | `prettier --write .` | format the codebase |
-| `format:check` | `prettier --check .` | verify formatting (CI / pre-commit) |
-| `test` | `vitest run` | all tests (unit + feature) |
-| `test:unit` | `vitest run src` | colocated unit tests only |
-| `test:feature` | `vitest run features` | feature / e2e tests only |
-| `test:watch` | `vitest` | watch mode |
-| `prepare` | `husky` | install git hooks (runs on `npm install`) |
+| script         | command                             | purpose                                    |
+| -------------- | ----------------------------------- | ------------------------------------------ |
+| `worker`       | `tsx src/infra/worker.ts`           | run the worker (long-lived)                |
+| `api`          | `tsx src/interfaces/http/server.ts` | run the Fastify HITL REST API (long-lived) |
+| `start`        | `tsx src/interfaces/cli/client.ts`  | start a workflow, print id, exit           |
+| `build`        | `tsc`                               | strict typecheck / emit to `dist/`         |
+| `lint`         | `eslint .`                          | ESLint v9 flat config                      |
+| `format`       | `prettier --write .`                | format the codebase                        |
+| `format:check` | `prettier --check .`                | verify formatting (CI / pre-commit)        |
+| `test`         | `vitest run`                        | all tests (unit + feature)                 |
+| `test:unit`    | `vitest run src`                    | colocated unit tests only                  |
+| `test:feature` | `vitest run features`               | feature / e2e tests only                   |
+| `test:watch`   | `vitest`                            | watch mode                                 |
+| `prepare`      | `husky`                             | install git hooks (runs on `npm install`)  |
 
 Runtime deps to add: `zod` (boundary validation), `fastify @fastify/cors @fastify/helmet
 pino` (API + logging). `undici` is **not** added — it's Node's built-in `fetch`. Dev deps
@@ -155,12 +155,12 @@ to add: `typescript tsx @types/node vitest @temporalio/testing @tsconfig/stricte
 One `Dockerfile` (multi-stage, `node:22-slim`); `worker`, `api`, and `client` are the
 **same image, different `command:`**.
 
-| service | command | kind | ports |
-|---------|---------|------|-------|
-| `temporal` | `temporal server start-dev --ip 0.0.0.0` | long-lived (cluster + UI) | 7233, 8233 |
-| `worker` | `worker` | long-lived (hosts workflows+activities) | — |
-| `api` | `api` | long-lived (Fastify REST) | 3000 |
-| `client` | `start` | one-shot (`profiles: [tools]`) | — |
+| service    | command                                  | kind                                    | ports      |
+| ---------- | ---------------------------------------- | --------------------------------------- | ---------- |
+| `temporal` | `temporal server start-dev --ip 0.0.0.0` | long-lived (cluster + UI)               | 7233, 8233 |
+| `worker`   | `worker`                                 | long-lived (hosts workflows+activities) | —          |
+| `api`      | `api`                                    | long-lived (Fastify REST)               | 3000       |
+| `client`   | `start`                                  | one-shot (`profiles: [tools]`)          | —          |
 
 `worker`/`api` `depends_on: temporal` (healthy). We do **not** build a frontend — the API
 is a programmatic interface; the human UI is Temporal's own Web UI.

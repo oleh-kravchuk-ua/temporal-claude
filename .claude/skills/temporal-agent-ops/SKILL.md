@@ -20,9 +20,9 @@ state machine) and [`docs/PLAN.md`](../../../docs/PLAN.md) for architecture.
 - The **workflow runs inside the worker**, not in a container of its own.
 - The **`temporal` server** is the cluster: it orchestrates and stores durable history,
   and serves the Web UI on `:8233` (gRPC on `:7233`).
-- A **client** (`npm run start`, the **HTTP API**, the CLI, or the Web UI) only *starts or
-  pokes* workflows, then exits/returns. The workflow keeps running on the worker regardless.
-- The **HTTP API** (`npm run api`, Fastify on `:3000`) is a Temporal *client* too — it hosts
+- A **client** (`npm run start`, the **HTTP API**, the CLI, or the Web UI) only _starts or
+  pokes_ workflows, then exits/returns. The workflow keeps running on the worker regardless.
+- The **HTTP API** (`npm run api`, Fastify on `:3000`) is a Temporal _client_ too — it hosts
   no workflow code; it just maps REST calls to signals/queries.
 - After start, the agent **blocks awaiting a human `approvePlan` signal**. Nothing
   finishes until a human approves (via API, CLI, or UI).
@@ -146,7 +146,7 @@ identical.
 
 ## When to apply
 
-- Running, demoing, or debugging *this* app's execution and HITL flow.
+- Running, demoing, or debugging _this_ app's execution and HITL flow.
 - Writing docs/scripts about how to operate it.
 
 For authoring new workflows/activities, determinism questions, or CLI details beyond the
