@@ -11,5 +11,5 @@
     "noEmit": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "features", "*.config.ts"]
+  "include": ["src", "features", "*.config.ts", "*.setup.ts"]
 }

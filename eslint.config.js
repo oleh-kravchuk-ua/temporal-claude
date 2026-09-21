@@ -17,7 +17,7 @@ export default tseslint.config(
 
   // Type-checked rules for our TypeScript sources (and TS config files).
   {
-    files: ['src/**/*.ts', 'features/**/*.ts', '*.config.ts'],
+    files: ['src/**/*.ts', 'features/**/*.ts', '*.config.ts', '*.setup.ts'],
     extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
