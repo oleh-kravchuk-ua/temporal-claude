@@ -42,13 +42,14 @@ Dependencies point **inward**; `domain` has zero framework imports.
 ```
 src/
 ├── domain/                     # pure business logic — NO @temporalio imports
-│   ├── agent.ts                #   types + mocked-AI pure functions
-│   └── ports.ts                #   AiToolsActivities port (what the core needs)
-├── application/                # orchestration = workflows
+│   ├── types.ts                #   the model: types/interfaces only (no logic, no framework)
+│   └── index.ts                #   barrel re-export
+├── application/                # orchestration = workflows + the ports it needs
+│   ├── ports.ts                #   AiToolsActivities port (the workflow's dependency contract)
 │   ├── contracts.ts            #   TASK_QUEUE + signal/query definitions
 │   └── agent.workflow.ts       #   agentWorkflow (proxies the port, handles signals/queries)
 ├── infra/                      # Temporal basics + adapters
-│   ├── activities/ai-tools.ts  #   implements the port → delegates to domain
+│   ├── activities/ai-tools.ts  #   mocked impl `satisfies AiToolsActivities` (real = LLM I/O)
 │   ├── config.ts               #   loads .env/.env.local, zod-validates → typed AppConfig
 │   ├── connection.ts           #   NativeConnection (worker) + Client connection (api/cli)
 │   ├── logger.ts               #   shared pino instance from AppConfig.logLevel
@@ -62,7 +63,7 @@ src/
         └── schemas.ts          #   zod request/response schemas (reuse contracts where possible)
 
 # Unit tests are COLOCATED next to their target (*.test.ts):
-#   src/domain/agent.test.ts · src/infra/config.test.ts
+#   src/infra/activities/ai-tools.test.ts · src/infra/config.test.ts
 #   src/application/agent.workflow.test.ts · src/interfaces/http/routes/agents.test.ts
 
 features/                       # feature / e2e tests — everything wired for real
@@ -81,8 +82,10 @@ features/                       # feature / e2e tests — everything wired for r
   Fastify app, client) driven through the user-facing entrypoints.
 
 **Ports & adapters:** the workflow calls `proxyActivities<AiToolsActivities>()` against the
-port defined in `domain/ports.ts`, so `application` never imports `infra`. The infra
-adapter implements the port and delegates the mocked reasoning to `domain/agent.ts`.
+port defined in `application/ports.ts`, so `application` never imports `infra`. The infra
+adapter (`infra/activities/ai-tools.ts`) implements the port; today its mocked/deterministic,
+tomorrow it's an LLM call — which is exactly why that logic lives in `infra`, not the pure
+`domain`. `domain` holds only the model (types) that every layer speaks.
 
 **Where the workflow runs:** there is no "workflow container." Workflow code is hosted by
 the **worker**, which runs both workflow and activity functions. The `temporal` container

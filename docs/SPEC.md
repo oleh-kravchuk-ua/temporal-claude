@@ -15,10 +15,13 @@ plan ──▶ AWAIT human approval ──▶ execute steps ──▶ synthesize
    cancel signal ends the run from any waiting/executing point
 ```
 
-All reasoning is **mocked** and lives in `domain/agent.ts` as pure, deterministic
-functions invoked _inside activities_. The workflow itself contains only orchestration.
+All reasoning is **mocked** and lives in the infra activity adapter
+(`infra/activities/ai-tools.ts`) as pure, deterministic functions — that's where a real LLM
+call would go (I/O), so it's an adapter concern, not domain. The workflow contains only
+orchestration. `domain/types.ts` holds the model (types/interfaces); the workflow's
+dependency contract is the `AiToolsActivities` port in `application/ports.ts`.
 
-## 2. Domain model (`src/domain/agent.ts`)
+## 2. Domain model (`src/domain/types.ts`)
 
 ```ts
 export type ToolName = 'search' | 'summarize' | 'draft';
@@ -125,7 +128,7 @@ export interface ApprovePlanInput {
 
 ## 5. Activity port & adapter
 
-**Port** (`src/domain/ports.ts`) — the dependency the core declares:
+**Port** (`src/application/ports.ts`) — the dependency the workflow declares:
 
 ```ts
 export interface AiToolsActivities {
@@ -135,9 +138,10 @@ export interface AiToolsActivities {
 }
 ```
 
-**Adapter** (`src/infra/activities/ai-tools.ts`) implements the port by delegating to the
-pure domain functions (this is the only place the mocked "latency"/side-effect-shaped code
-lives).
+**Adapter** (`src/infra/activities/ai-tools.ts`) implements the port with the mocked,
+deterministic `planTask`/`runTool`/`synthesize` — the single place the fake "AI" lives, and
+where a real LLM call would go. Exported as `aiToolsActivities` typed `satisfies
+AiToolsActivities` so the port and impl can't drift.
 
 **Proxy options** (in the workflow):
 
@@ -214,8 +218,8 @@ Contracts are explicit at every seam; dependencies point **inward only**
 | Seam            | Contract (owner)                                              | Consumers                              | Strictness                                        |
 | --------------- | ------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------- |
 | Config          | `AppConfig` + `AppConfigSchema` (`infra/config.ts`)           | worker, client, connection             | zod at load (runtime)                             |
-| Domain model    | entities/VOs in `domain/agent.ts`                             | all layers                             | TS types + `strictest`                            |
-| Activity port   | `AiToolsActivities` (`domain/ports.ts`)                       | workflow (proxy), infra adapter (impl) | TS interface; adapter must `satisfies` it         |
+| Domain model    | types in `domain/types.ts`                                    | all layers                             | TS types + `strictest`                            |
+| Activity port   | `AiToolsActivities` (`application/ports.ts`)                  | workflow (proxy), infra adapter (impl) | TS interface; adapter must `satisfies` it         |
 | Workflow API    | `AgentInput`, `AgentResult` (`application/agent.workflow.ts`) | CLI, HTTP API, tests                   | zod-validate `AgentInput` at workflow entry       |
 | Signals/queries | defs + payload types (`application/contracts.ts`)             | workflow, CLI, HTTP API, UI            | zod-validate payloads in handlers (external JSON) |
 | HTTP API        | REST endpoints (`interfaces/http`) — see §6d                  | external HTTP callers                  | zod-validate request body/params; helmet + cors   |
@@ -346,7 +350,8 @@ A documented checklist against a live stack (`temporal server start-dev` + `npm 
 
 ### Unit — colocated (`*.test.ts` beside the source), collaborators mocked
 
-- `src/domain/agent.test.ts` — pure `planTask` / `runTool` / `synthesize`, incl. edge cases.
+- `src/infra/activities/ai-tools.test.ts` — the mocked `planTask` / `runTool` / `synthesize`
+  adapter, incl. edge cases.
 - `src/infra/config.test.ts` — defaults with no env files; `.env.local` overrides `.env`;
   invalid `LOG_LEVEL` throws.
 - `src/application/agent.workflow.test.ts` — `TestWorkflowEnvironment.createTimeSkipping()`

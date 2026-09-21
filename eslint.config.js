@@ -31,6 +31,9 @@ export default tseslint.config(
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       '@typescript-eslint/consistent-type-imports': 'error',
+      // Prefer arrow function expressions over `function` declarations.
+      'func-style': ['error', 'expression'],
+      'prefer-arrow-callback': 'error',
     },
   },
 
@@ -69,6 +72,15 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+
+  // Activities are async by contract (the port returns Promises), so a mock/adapter body
+  // with no `await` is intentional — real implementations will await I/O (e.g. an LLM call).
+  {
+    files: ['src/infra/activities/**/*.ts'],
+    rules: {
+      '@typescript-eslint/require-await': 'off',
     },
   },
 
