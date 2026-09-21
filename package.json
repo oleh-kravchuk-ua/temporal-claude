@@ -1,0 +1,26 @@
+{
+  "name": "temporal-claude",
+  "version": "1.0.0",
+  "description": "A small application to test orchestration to run AI within Temporal",
+  "homepage": "https://github.com/oleh-kravchuk-ua/temporal-claude#readme",
+  "bugs": {
+    "url": "https://github.com/oleh-kravchuk-ua/temporal-claude/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oleh-kravchuk-ua/temporal-claude.git"
+  },
+  "license": "./LICENSE",
+  "author": "Oleh Kravchuk <oleh.kravchuk.ua@gmail.com>",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@temporalio/activity": "^1.24.0",
+    "@temporalio/client": "^1.24.0",
+    "@temporalio/worker": "^1.24.0",
+    "@temporalio/workflow": "^1.24.0"
+  }
+}
