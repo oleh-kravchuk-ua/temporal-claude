@@ -5,31 +5,33 @@
 
 ## Phase 0 — Tooling & config
 
-- [ ] Add runtime deps: `zod fastify @fastify/cors @fastify/helmet pino`
+- [x] Add runtime deps: `zod fastify @fastify/cors @fastify/helmet pino`
       _(no `undici` dep — use Node's built-in `fetch`)_
-- [ ] Add dev deps: `typescript tsx @types/node vitest @temporalio/testing
-      @tsconfig/strictest eslint @eslint/js typescript-eslint prettier eslint-config-prettier
-      husky @commitlint/cli @commitlint/config-conventional pino-pretty`
-      _(runtime `@temporalio/*` already installed)_
-- [ ] `tsconfig.json` extending `@tsconfig/strictest` (ESNext, `moduleResolution: Bundler`,
-      `outDir: dist`, include `src`/`test`) — PLAN §Tooling
-- [ ] `eslint.config.js` — ESLint v9 flat config, type-aware, `_`-prefixed unused args OK,
-      `consistent-type-imports` on; `no-restricted-imports` to forbid `application`→`infra`
-      and any `@temporalio/*` import from `domain`; **`eslint-config-prettier` last** to
-      disable formatting rules
-- [ ] `.prettierrc` + `.prettierignore` (ignore `dist`, `node_modules`, `.husky`)
-- [ ] `vitest.config.ts` — Node environment, longer test timeout for the test server,
+- [x] Add dev deps (single line to keep Prettier happy): `typescript tsx @types/node vitest @temporalio/testing @tsconfig/strictest eslint @eslint/js typescript-eslint prettier eslint-config-prettier globals husky @commitlint/cli @commitlint/config-conventional pino-pretty` _(runtime `@temporalio/*` already installed; `globals` added for ESLint Node globals)_
+- [x] `tsconfig.json` extending `@tsconfig/strictest` (ESNext, `moduleResolution: Bundler`,
+      `verbatimModuleSyntax`, **`noEmit`** — typecheck only, we run via tsx; include
+      `src`/`features`/`*.config.ts`)
+- [x] `eslint.config.js` — ESLint v10 flat config, type-aware (`recommendedTypeChecked` via
+      `projectService`), `_`-prefixed unused args OK, `consistent-type-imports` on;
+      `no-restricted-imports` forbids `application`→`infra`/`interfaces` and any
+      `@temporalio/*`/outer-layer import from `domain`; Node globals via `globals`;
+      **`eslint-config-prettier` last**
+- [x] `.prettierrc` + `.prettierignore` (ignore `dist`, `coverage`, `node_modules`,
+      `package-lock.json`, `.husky`)
+- [x] `vitest.config.ts` — Node environment, 30s timeouts,
       `include: ['src/**/*.test.ts', 'features/**/*.test.ts']`
-- [ ] `package.json` scripts: `worker`, `api`, `start`, `build`, `lint`, `format`,
+- [x] `package.json` scripts: `worker`, `api`, `start`, `build`, `lint`, `format`,
       `format:check`, `test`, `test:unit` (`vitest run src`), `test:feature`
       (`vitest run features`), `test:watch`, `prepare` (husky)
-- [ ] `.env.example` — document `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`,
+- [x] `.env.example` — documents `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`,
       `TEMPORAL_TASK_QUEUE`, `LOG_LEVEL`, `HTTP_PORT`, `HTTP_HOST`, `CORS_ORIGIN`,
       `TEMPORAL_API_KEY`
-- [ ] Confirm `.gitignore` keeps `.env`/`.env.local` ignored and `.env.example` tracked
-- [ ] `husky init`; `.husky/commit-msg` → `npx --no -- commitlint --edit "$1"`;
+- [x] Confirmed `.gitignore` keeps `.env`/`.env.local` ignored and `.env.example` tracked
+- [x] `husky init`; `.husky/commit-msg` → `npx --no -- commitlint --edit "$1"`;
       `.husky/pre-commit` → `npm run format:check && npm run lint && npm run build`
-- [ ] `commitlint.config.js` — `export default { extends: ['@commitlint/config-conventional'] }`
+- [x] `commitlint.config.js` — `export default { extends: ['@commitlint/config-conventional'] }`
+- [x] Verified: `format:check`, `lint`, `build` (tsc --noEmit) all pass; commitlint
+      accepts a conventional message and rejects a bad one
 
 ## Phase 1 — Domain (pure, no Temporal) — SPEC §2, §6c
 
@@ -66,7 +68,7 @@
 - [ ] `src/infra/connection.ts` — `NativeConnection` (worker) + `Client`/`Connection`
       (api/cli) built from `AppConfig` (address/namespace/API key)
 - [ ] `src/infra/worker.ts` — `loadConfig()` → `Worker.create({ workflowsPath, activities,
-      taskQueue })` + run, graceful shutdown on SIGINT/SIGTERM
+taskQueue })` + run, graceful shutdown on SIGINT/SIGTERM
 
 ## Phase 4 — Interfaces (client) — SPEC §8
 
@@ -87,6 +89,7 @@
 ## Phase 5 — Tests (three tiers) — SPEC §9, §10
 
 ### Unit — colocated (`*.test.ts` beside source), collaborators mocked
+
 - [ ] `src/domain/agent.test.ts` — `planTask` / `runTool` / `synthesize` + edge cases
 - [ ] `src/infra/config.test.ts` — defaults with no env files; `.env.local` overrides
       `.env`; invalid `LOG_LEVEL` throws — SPEC §6a
@@ -101,12 +104,14 @@
       `/healthz` — SPEC §6d
 
 ### Feature / e2e — `features/` (repo root), everything real
+
 - [ ] `features/agent-lifecycle.feature.test.ts` — test server + real worker + real
       activities: start → query → approve → `completed` with a real synthesized answer
 - [ ] `features/http-api.feature.test.ts` — real Fastify app → real client → real worker:
       `POST /agents` → `GET /agents/:id` → `POST /agents/:id/approve` → poll until `completed`
 
 ### Smoke — manual (not automated)
+
 - [ ] Documented `curl` checklist in the `temporal-agent-ops` skill / README (covered in
       Phase 7 manual smoke)
 

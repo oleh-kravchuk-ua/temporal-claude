@@ -16,7 +16,7 @@ plan ──▶ AWAIT human approval ──▶ execute steps ──▶ synthesize
 ```
 
 All reasoning is **mocked** and lives in `domain/agent.ts` as pure, deterministic
-functions invoked *inside activities*. The workflow itself contains only orchestration.
+functions invoked _inside activities_. The workflow itself contains only orchestration.
 
 ## 2. Domain model (`src/domain/agent.ts`)
 
@@ -24,14 +24,14 @@ functions invoked *inside activities*. The workflow itself contains only orchest
 export type ToolName = 'search' | 'summarize' | 'draft';
 
 export interface PlanStep {
-  id: number;                 // 1-based, stable within a plan
+  id: number; // 1-based, stable within a plan
   description: string;
   tool: ToolName;
 }
 
 export interface Plan {
   topic: string;
-  steps: PlanStep[];          // non-empty
+  steps: PlanStep[]; // non-empty
 }
 
 export interface StepResult {
@@ -45,18 +45,18 @@ export type AgentStatus =
   | 'executing'
   | 'synthesizing'
   | 'completed'
-  | 'rejected'                // terminal: too many rejections (see §6)
-  | 'cancelled';              // terminal: cancel signal received
+  | 'rejected' // terminal: too many rejections (see §6)
+  | 'cancelled'; // terminal: cancel signal received
 
 export interface AgentState {
   status: AgentStatus;
   topic: string;
-  revision: number;           // increments each (re)plan; starts at 1
-  plan?: Plan;                // set once planned
-  currentStepId?: number;     // set during 'executing'
+  revision: number; // increments each (re)plan; starts at 1
+  plan?: Plan; // set once planned
+  currentStepId?: number; // set during 'executing'
   results: StepResult[];
-  guidance: string[];         // accumulated mid-run guidance
-  finalAnswer?: string;       // set on 'completed'
+  guidance: string[]; // accumulated mid-run guidance
+  finalAnswer?: string; // set on 'completed'
 }
 ```
 
@@ -74,11 +74,13 @@ Temporal machinery.
 ## 3. Workflow I/O (`src/application/agent.workflow.ts`)
 
 ```ts
-export interface AgentInput { topic: string; }
+export interface AgentInput {
+  topic: string;
+}
 
 export interface AgentResult {
   status: 'completed' | 'rejected' | 'cancelled';
-  finalAnswer?: string;       // present iff status === 'completed'
+  finalAnswer?: string; // present iff status === 'completed'
   revision: number;
   stepCount: number;
 }
@@ -94,31 +96,31 @@ Shared by the workflow and any client (our `client.ts`, the CLI, the Web UI).
 export const TASK_QUEUE = 'ai-agent';
 
 // Signals
-export const approvePlan   = defineSignal<[ApprovePlanInput]>('approvePlan');
+export const approvePlan = defineSignal<[ApprovePlanInput]>('approvePlan');
 export const provideGuidance = defineSignal<[string]>('provideGuidance');
-export const cancelAgent   = defineSignal<[]>('cancel');
+export const cancelAgent = defineSignal<[]>('cancel');
 
 // Query
 export const getState = defineQuery<AgentState>('getState');
 
 export interface ApprovePlanInput {
   approved: boolean;
-  feedback?: string;          // used when approved === false to steer re-planning
+  feedback?: string; // used when approved === false to steer re-planning
 }
 ```
 
 ### Signal semantics
 
-| Signal | Payload | Effect |
-|--------|---------|--------|
-| `approvePlan` | `{ approved, feedback? }` | `approved: true` → proceed to execute. `approved: false` → re-plan with `feedback` (revision++), stay awaiting approval. Ignored unless status is `awaiting_approval`. |
-| `provideGuidance` | `string` | Append to `guidance`; applied to subsequent `runTool` calls. Accepted anytime before completion. |
-| `cancel` | — | Request graceful stop; workflow ends `cancelled` at the next safe point. |
+| Signal            | Payload                   | Effect                                                                                                                                                                 |
+| ----------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `approvePlan`     | `{ approved, feedback? }` | `approved: true` → proceed to execute. `approved: false` → re-plan with `feedback` (revision++), stay awaiting approval. Ignored unless status is `awaiting_approval`. |
+| `provideGuidance` | `string`                  | Append to `guidance`; applied to subsequent `runTool` calls. Accepted anytime before completion.                                                                       |
+| `cancel`          | —                         | Request graceful stop; workflow ends `cancelled` at the next safe point.                                                                                               |
 
 ### Query semantics
 
-| Query | Returns | Rule |
-|-------|---------|------|
+| Query      | Returns               | Rule                                                    |
+| ---------- | --------------------- | ------------------------------------------------------- |
 | `getState` | `AgentState` snapshot | **Read-only.** Must not mutate state or run activities. |
 
 ## 5. Activity port & adapter
@@ -175,18 +177,18 @@ depends on `AppConfig`, never on `process.env` (DIP + DRY).
 ```ts
 // schema is the single source of truth; the type is inferred from it
 export const AppConfigSchema = z.object({
-  temporalAddress:   z.string().min(1).default('localhost:7233'),
+  temporalAddress: z.string().min(1).default('localhost:7233'),
   temporalNamespace: z.string().min(1).default('default'),
-  taskQueue:         z.string().min(1).default('ai-agent'),
-  logLevel:          z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  httpPort:          z.coerce.number().int().positive().default(3000),
-  httpHost:          z.string().min(1).default('0.0.0.0'),
-  corsOrigin:        z.string().min(1).default('*'),
-  temporalApiKey:    z.string().min(1).optional(),   // set via .env.local for Cloud
+  taskQueue: z.string().min(1).default('ai-agent'),
+  logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  httpPort: z.coerce.number().int().positive().default(3000),
+  httpHost: z.string().min(1).default('0.0.0.0'),
+  corsOrigin: z.string().min(1).default('*'),
+  temporalApiKey: z.string().min(1).optional(), // set via .env.local for Cloud
 });
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 
-export function loadConfig(): AppConfig;   // throws a clear error on invalid env
+export function loadConfig(): AppConfig; // throws a clear error on invalid env
 ```
 
 **Env var mapping / precedence:** `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`,
@@ -201,7 +203,7 @@ A single shared **pino** instance, level from `AppConfig.logLevel`, is the loggi
 - **Activities, worker, CLI, API** use this pino logger (or Fastify's built-in pino, which
   is configured from the same level).
 - **Workflows** must NOT use pino or any direct I/O — they log via `import { log } from
-  '@temporalio/workflow'` (routed through sinks). This preserves determinism (§7).
+'@temporalio/workflow'` (routed through sinks). This preserves determinism (§7).
 - `pino-pretty` is a dev-only transport for readable local output; JSON in production.
 
 ## 6b. Contracts & layer boundaries (strict)
@@ -209,17 +211,18 @@ A single shared **pino** instance, level from `AppConfig.logLevel`, is the loggi
 Contracts are explicit at every seam; dependencies point **inward only**
 (`interfaces`/`infra` → `application` → `domain`). Nothing in `domain` imports a framework.
 
-| Seam | Contract (owner) | Consumers | Strictness |
-|------|------------------|-----------|------------|
-| Config | `AppConfig` + `AppConfigSchema` (`infra/config.ts`) | worker, client, connection | zod at load (runtime) |
-| Domain model | entities/VOs in `domain/agent.ts` | all layers | TS types + `strictest` |
-| Activity port | `AiToolsActivities` (`domain/ports.ts`) | workflow (proxy), infra adapter (impl) | TS interface; adapter must `satisfies` it |
-| Workflow API | `AgentInput`, `AgentResult` (`application/agent.workflow.ts`) | CLI, HTTP API, tests | zod-validate `AgentInput` at workflow entry |
-| Signals/queries | defs + payload types (`application/contracts.ts`) | workflow, CLI, HTTP API, UI | zod-validate payloads in handlers (external JSON) |
-| HTTP API | REST endpoints (`interfaces/http`) — see §6d | external HTTP callers | zod-validate request body/params; helmet + cors |
+| Seam            | Contract (owner)                                              | Consumers                              | Strictness                                        |
+| --------------- | ------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------- |
+| Config          | `AppConfig` + `AppConfigSchema` (`infra/config.ts`)           | worker, client, connection             | zod at load (runtime)                             |
+| Domain model    | entities/VOs in `domain/agent.ts`                             | all layers                             | TS types + `strictest`                            |
+| Activity port   | `AiToolsActivities` (`domain/ports.ts`)                       | workflow (proxy), infra adapter (impl) | TS interface; adapter must `satisfies` it         |
+| Workflow API    | `AgentInput`, `AgentResult` (`application/agent.workflow.ts`) | CLI, HTTP API, tests                   | zod-validate `AgentInput` at workflow entry       |
+| Signals/queries | defs + payload types (`application/contracts.ts`)             | workflow, CLI, HTTP API, UI            | zod-validate payloads in handlers (external JSON) |
+| HTTP API        | REST endpoints (`interfaces/http`) — see §6d                  | external HTTP callers                  | zod-validate request body/params; helmet + cors   |
 
 **Rules:**
-- `application` must **not** import `infra` (workflow proxies the *port*, not the impl).
+
+- `application` must **not** import `infra` (workflow proxies the _port_, not the impl).
 - `domain` imports nothing from `application`/`infra`/`@temporalio/*`.
 - `contracts.ts` is the **single source** of signal/query names and payload types (DRY) —
   the client and the ops runbook reference it, never re-declare names.
@@ -258,16 +261,17 @@ business logic, no state; every handler just validates input and calls the Tempo
 **Response envelope** (consistent): success → `{ data: <payload> }`; error →
 `{ error: { code, message, details? } }` with the matching HTTP status.
 
-| Method & path | Body / params | Temporal action | Success | Errors |
-|---------------|---------------|-----------------|---------|--------|
-| `POST /agents` | `{ topic: string (1..) }` | `client.start(agentWorkflow, …)` | `201 { data: { workflowId } }` | `400` invalid body |
-| `GET /agents/:id` | `id` param | `handle.query(getState)` | `200 { data: AgentState }` | `404` unknown id |
-| `POST /agents/:id/approve` | `{ approved: boolean, feedback?: string }` | `handle.signal(approvePlan, …)` | `202` (accepted) | `400` invalid, `404` |
-| `POST /agents/:id/guidance` | `{ guidance: string (1..) }` | `handle.signal(provideGuidance, …)` | `202` | `400`, `404` |
-| `POST /agents/:id/cancel` | — | `handle.signal(cancelAgent)` | `202` | `404` |
-| `GET /healthz` | — | — (liveness) | `200 { data: { status: 'ok' } }` | — |
+| Method & path               | Body / params                              | Temporal action                     | Success                          | Errors               |
+| --------------------------- | ------------------------------------------ | ----------------------------------- | -------------------------------- | -------------------- |
+| `POST /agents`              | `{ topic: string (1..) }`                  | `client.start(agentWorkflow, …)`    | `201 { data: { workflowId } }`   | `400` invalid body   |
+| `GET /agents/:id`           | `id` param                                 | `handle.query(getState)`            | `200 { data: AgentState }`       | `404` unknown id     |
+| `POST /agents/:id/approve`  | `{ approved: boolean, feedback?: string }` | `handle.signal(approvePlan, …)`     | `202` (accepted)                 | `400` invalid, `404` |
+| `POST /agents/:id/guidance` | `{ guidance: string (1..) }`               | `handle.signal(provideGuidance, …)` | `202`                            | `400`, `404`         |
+| `POST /agents/:id/cancel`   | —                                          | `handle.signal(cancelAgent)`        | `202`                            | `404`                |
+| `GET /healthz`              | —                                          | — (liveness)                        | `200 { data: { status: 'ok' } }` | —                    |
 
 **Rules:**
+
 - Signals are fire-and-forget → `202 Accepted` (a signal cannot report workflow outcome).
 - Request schemas live in `interfaces/http/schemas.ts` and **reuse** the payload schemas
   from `contracts.ts` where they overlap (e.g. `ApprovePlanInput`) — DRY, no re-declaring.
@@ -284,7 +288,7 @@ business logic, no state; every handler just validates input and calls the Tempo
 - Signal handlers are **non-async** (they only mutate local state); no activities/sleeps in
   handlers or in the query handler or update validators.
 - Under `@tsconfig/strictest`, `noUncheckedIndexedAccess` makes indexed access `T |
-  undefined` — guard array/index reads explicitly.
+undefined` — guard array/index reads explicitly.
 - All `@temporalio/*` packages must share one identical version.
 - Zod validation is **synchronous** — safe inside signal/query handlers (no async, no
   activities). Invalid signal payloads are validated then rejected/ignored with a logged
@@ -334,11 +338,14 @@ business logic, no state; every handler just validates input and calls the Tempo
 ## 10. Test plan (three tiers, Vitest)
 
 ### Smoke — manual (`curl`, not automated)
+
 A documented checklist against a live stack (`temporal server start-dev` + `npm run worker`
-+ `npm run api`): `POST /agents` → `GET /agents/:id` → `POST /agents/:id/approve` → confirm
-`completed`. Lives in the `temporal-agent-ops` skill / README.
+
+- `npm run api`): `POST /agents` → `GET /agents/:id` → `POST /agents/:id/approve` → confirm
+  `completed`. Lives in the `temporal-agent-ops` skill / README.
 
 ### Unit — colocated (`*.test.ts` beside the source), collaborators mocked
+
 - `src/domain/agent.test.ts` — pure `planTask` / `runTool` / `synthesize`, incl. edge cases.
 - `src/infra/config.test.ts` — defaults with no env files; `.env.local` overrides `.env`;
   invalid `LOG_LEVEL` throws.
@@ -357,6 +364,7 @@ A documented checklist against a live stack (`temporal server start-dev` + `npm 
   Client method with the validated payload.
 
 ### Feature / e2e — `features/` (repo root), everything real
+
 - `features/agent-lifecycle.feature.test.ts` — test server + **real worker + real
   activities**: start via the client, query `getState`, send the real `approvePlan` signal,
   assert the workflow reaches `completed` with a real synthesized answer across all layers.
