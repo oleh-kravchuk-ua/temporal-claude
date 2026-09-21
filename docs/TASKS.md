@@ -144,11 +144,15 @@ test.)_
 
 ## Phase 6 — Docker — PLAN §Run model
 
-- [ ] `Dockerfile` (multi-stage, `node:22-slim`; verify `@temporalio/core-bridge` prebuild)
-- [ ] `.dockerignore` (include `.env`, `.env.local`, `node_modules`, `dist`, `.git`)
-- [ ] `docker-compose.yml` — `temporal` (start-dev, ports 7233/8233), `worker`, `api`
-      (port 3000), `client` (one-shot, `profiles: [tools]`), healthcheck + `depends_on`;
-      env `TEMPORAL_ADDRESS=temporal:7233` for worker/api/client
+- [x] `Dockerfile` (multi-stage, `node:26-slim`, runs via tsx) — `@temporalio/core-bridge`
+      prebuild installs cleanly; image builds
+- [x] `.dockerignore` (excludes env files, node_modules, tests, tooling, docs)
+- [x] `docker-compose.yml` — `temporal` (`temporalio/temporal:latest` → `server start-dev`,
+      ports 7233/8233, healthcheck), `worker`, `api` (port 3000), `client` (one-shot,
+      `profiles: [tools]`), `depends_on: temporal (healthy)`, `TEMPORAL_ADDRESS=temporal:7233`
+- [x] **Verified live:** `docker compose up` → worker polling + API listening; full HITL
+      smoke through the API (`POST /agents` → approve → `completed` with a real answer) and
+      the one-shot `client` build/run; teardown clean
 
 ## Phase 7 — Verify & document
 

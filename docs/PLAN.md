@@ -113,7 +113,9 @@ the rest of the code depends on a typed `AppConfig` (DIP + DRY).
   (`default`), `LOG_LEVEL` (`info`), `NODE_ENV` (`development`), `HTTP_PORT`
   (`3000`), `HTTP_HOST` (`0.0.0.0`), `CORS_ORIGIN` (`*`), `TEMPORAL_API_KEY` (optional, Cloud).
   The **task queue is not an env var** — it's the `TASK_QUEUE` contract constant.
-- Compose passes env explicitly per service (worker/api/client get `TEMPORAL_ADDRESS=temporal:7233`).
+- Compose loads `.env`/`.env.local` into each app service via `env_file` (both optional), then
+  overrides the network-specific vars in `environment:` (`TEMPORAL_ADDRESS=temporal:7233` — the
+  service DNS, not localhost). `environment:` wins over `env_file`.
 
 ## Run model
 
@@ -159,7 +161,7 @@ to add: `typescript tsx @types/node vitest @temporalio/testing @tsconfig/stricte
 
 ## Docker Compose services
 
-One `Dockerfile` (multi-stage, `node:22-slim`); `worker`, `api`, and `client` are the
+One `Dockerfile` (multi-stage, `node:26-slim`); `worker`, `api`, and `client` are the
 **same image, different `command:`**.
 
 | service    | command                                  | kind                                    | ports      |
