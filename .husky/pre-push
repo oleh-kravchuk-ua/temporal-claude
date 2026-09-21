@@ -1,0 +1,7 @@
+branch=$(git rev-parse --abbrev-ref HEAD)
+case "$branch" in
+  master | main)
+    echo "⛔ Refusing to push to $branch — use a feature branch + PR." >&2
+    exit 1
+    ;;
+esac
