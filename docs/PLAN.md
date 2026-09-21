@@ -159,7 +159,7 @@ to add: `typescript tsx @types/node vitest @temporalio/testing @tsconfig/stricte
 
 ## Docker Compose services
 
-One `Dockerfile` (multi-stage, `node:22-slim`); `worker`, `api`, and `client` are the
+One `Dockerfile` (multi-stage, `node:26-slim`); `worker`, `api`, and `client` are the
 **same image, different `command:`**.
 
 | service    | command                                  | kind                                    | ports      |
