@@ -20,6 +20,7 @@
     "start": "tsx src/interfaces/cli/client.ts",
     "build": "tsc --noEmit",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",

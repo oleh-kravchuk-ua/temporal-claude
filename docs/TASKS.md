@@ -20,8 +20,8 @@
       `package-lock.json`, `.husky`)
 - [x] `vitest.config.ts` — Node environment, 30s timeouts,
       `include: ['src/**/*.test.ts', 'features/**/*.test.ts']`
-- [x] `package.json` scripts: `worker`, `api`, `start`, `build`, `lint`, `format`,
-      `format:check`, `test`, `test:unit` (`vitest run src`), `test:feature`
+- [x] `package.json` scripts: `worker`, `api`, `start`, `build`, `lint`, `lint:fix`,
+      `format`, `format:check`, `test`, `test:unit` (`vitest run src`), `test:feature`
       (`vitest run features`), `test:watch`, `prepare` (husky)
 - [x] `.env.example` — documents `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`,
       `TEMPORAL_TASK_QUEUE`, `LOG_LEVEL`, `HTTP_PORT`, `HTTP_HOST`, `CORS_ORIGIN`,

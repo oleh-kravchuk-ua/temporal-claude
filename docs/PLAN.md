@@ -126,8 +126,9 @@ change.
 | `worker`       | `tsx src/infra/worker.ts`           | run the worker (long-lived)                |
 | `api`          | `tsx src/interfaces/http/server.ts` | run the Fastify HITL REST API (long-lived) |
 | `start`        | `tsx src/interfaces/cli/client.ts`  | start a workflow, print id, exit           |
-| `build`        | `tsc`                               | strict typecheck / emit to `dist/`         |
-| `lint`         | `eslint .`                          | ESLint v9 flat config                      |
+| `build`        | `tsc --noEmit`                      | strict typecheck (run via tsx; no emit)    |
+| `lint`         | `eslint .`                          | ESLint flat config                         |
+| `lint:fix`     | `eslint . --fix`                    | lint and auto-fix                          |
 | `format`       | `prettier --write .`                | format the codebase                        |
 | `format:check` | `prettier --check .`                | verify formatting (CI / pre-commit)        |
 | `test`         | `vitest run`                        | all tests (unit + feature)                 |

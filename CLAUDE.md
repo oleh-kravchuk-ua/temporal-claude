@@ -39,8 +39,8 @@ Key mental model: **the workflow runs inside the worker**, not a container of it
 | `npm run worker`                  | run the worker (hosts workflows + activities)       |
 | `npm run api`                     | run the Fastify HITL REST API (`:3000`)             |
 | `npm run start`                   | CLI client — start one workflow, print its id, exit |
-| `npm run build`                   | strict typecheck / emit (`tsc`)                     |
-| `npm run lint`                    | ESLint v9                                           |
+| `npm run build`                   | strict typecheck (`tsc --noEmit`)                   |
+| `npm run lint` / `lint:fix`       | ESLint (check / auto-fix)                           |
 | `npm run format` / `format:check` | Prettier write / verify                             |
 | `npm test` / `npm run test:watch` | Vitest (single file: `npx vitest run <path>`)       |
 
