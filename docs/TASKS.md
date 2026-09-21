@@ -96,13 +96,16 @@
 
 ## Phase 4b — HTTP API (Fastify) — SPEC §6d, §6a-bis
 
-- [ ] `src/interfaces/http/schemas.ts` — zod request/params schemas, reusing
-      `contracts/` payload schemas where they overlap (DRY)
-- [ ] `src/interfaces/http/routes/agents.ts` — `/agents` start/query/signal/cancel +
-      `/healthz`, mapping to the Temporal Client; consistent `{ data }` / `{ error }` envelope
-- [ ] `src/interfaces/http/server.ts` — Fastify bootstrap: pino logger, `@fastify/helmet`,
-      `@fastify/cors` (from `corsOrigin`), register routes, `loadConfig()` → listen on
-      `httpHost:httpPort`; graceful shutdown; **no business logic** (thin adapter) — SPEC §6d
+- [x] `src/interfaces/http/schemas.ts` — zod request/params schemas, reusing `contracts/`
+      payload schemas (`AgentInputSchema`/`ApprovePlanInputSchema`/`GuidanceSchema`) — DRY
+- [x] `src/interfaces/http/routes/agents.ts` — `registerAgentRoutes`: `POST /agents`,
+      `GET /agents/:id`, `POST /agents/:id/{approve,guidance,cancel}`, `GET /healthz`,
+      mapping to the Temporal Client; `{ data }` on success, `202` for signals; thin adapter
+- [x] `src/interfaces/http/server.ts` — Fastify bootstrap: pino (`loggerOptions`),
+      `@fastify/helmet`, `@fastify/cors` (from `corsOrigin`), `setErrorHandler` mapping
+      ZodError→400 / WorkflowNotFoundError→404 / else 500 into `{ error }`, register routes,
+      `loadConfig()` → listen on `httpHost:httpPort`, graceful SIGINT/SIGTERM shutdown
+- [x] verified: `build` + `lint` + `format` + unit tests pass (HTTP route tests are Phase 5)
 
 ## Phase 5 — Tests (three tiers) — SPEC §9, §10
 
