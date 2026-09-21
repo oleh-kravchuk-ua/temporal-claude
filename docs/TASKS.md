@@ -35,11 +35,15 @@
 
 ## Phase 1 — Domain (pure, no Temporal) — SPEC §2, §6c
 
-- [ ] `src/domain/agent.ts` — types (`PlanStep`, `Plan`, `StepResult`, `AgentStatus`,
-      `AgentState`) + pure fns `planTask`, `runTool`, `synthesize` (mocked, deterministic).
-      No framework imports (DDD/DIP).
-- [ ] `src/domain/ports.ts` — `AiToolsActivities` port (minimal — ISP) — SPEC §5
-- [ ] Domain unit tests (part of Phase 5) — SPEC §10
+- [x] `src/domain/types.ts` — the model ONLY: `ToolName`, `PlanStep`, `Plan`, `StepResult`,
+      `AgentStatus`, `AgentState`. No logic, no framework. (Port + mock logic moved OUT of
+      domain — see below.)
+- [x] `src/domain/index.ts` — barrel re-export
+- [x] `src/application/ports.ts` — `AiToolsActivities` port (relocated from domain: "Activities"
+      is a Temporal concept and it's the workflow's contract) — SPEC §5
+- [x] `src/infra/activities/ai-tools.ts` — mocked `planTask`/`runTool`/`synthesize`
+      `satisfies AiToolsActivities` (pulled forward from Phase 3; real = LLM I/O → infra)
+- [x] Colocated unit test `src/infra/activities/ai-tools.test.ts` — 10 tests passing — SPEC §10
 
 ## Phase 2 — Application (workflow + contracts) — SPEC §3, §4, §6, §6b
 
@@ -63,8 +67,8 @@
       (only reader of `process.env`) — SPEC §6a
 - [ ] `src/infra/logger.ts` — shared pino instance from `AppConfig.logLevel`
       (`pino-pretty` in dev) — SPEC §6a-bis
-- [ ] `src/infra/activities/ai-tools.ts` — `satisfies AiToolsActivities`, delegates to
-      domain; logs via pino
+- [x] `src/infra/activities/ai-tools.ts` — mocked impl `satisfies AiToolsActivities`
+      _(done early during the Phase 1 relayering)_; add pino logging when the logger lands
 - [ ] `src/infra/connection.ts` — `NativeConnection` (worker) + `Client`/`Connection`
       (api/cli) built from `AppConfig` (address/namespace/API key)
 - [ ] `src/infra/worker.ts` — `loadConfig()` → `Worker.create({ workflowsPath, activities,
@@ -90,7 +94,8 @@ taskQueue })` + run, graceful shutdown on SIGINT/SIGTERM
 
 ### Unit — colocated (`*.test.ts` beside source), collaborators mocked
 
-- [ ] `src/domain/agent.test.ts` — `planTask` / `runTool` / `synthesize` + edge cases
+- [x] `src/infra/activities/ai-tools.test.ts` — `planTask` / `runTool` / `synthesize` + edge
+      cases _(done during Phase 1 relayering)_
 - [ ] `src/infra/config.test.ts` — defaults with no env files; `.env.local` overrides
       `.env`; invalid `LOG_LEVEL` throws — SPEC §6a
 - [ ] `src/application/agent.workflow.test.ts` (time-skipping + mocked activities):

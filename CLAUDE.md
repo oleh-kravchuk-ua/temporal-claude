@@ -24,8 +24,8 @@ Single package, **layered DDD**, dependencies point **inward only**:
 
 ```
 src/
-├── domain/         # pure business logic + types + AiToolsActivities port — NO @temporalio imports
-├── application/    # workflows + contracts.ts (TASK_QUEUE, signal/query defs) — MUST NOT import infra
+├── domain/         # the model: types/interfaces only (pure, framework-free) — NO @temporalio imports
+├── application/    # workflows + ports.ts (AiToolsActivities) + contracts.ts (signals/queries) — MUST NOT import infra
 ├── infra/          # config, logger (pino), Temporal connection, activity adapters, worker  ← workflows run in the worker
 └── interfaces/     # driving adapters: cli/ (start-only client) + http/ (Fastify HITL REST API)
 ```
@@ -49,6 +49,7 @@ Local Temporal cluster for manual runs: `temporal server start-dev` (gRPC `:7233
 ## Toolchain / conventions (decided; enforced once wired)
 
 - **ES modules only** (`"type": "module"`) — never `require`/`module.exports`; use `import type` for type-only imports.
+- **Prefer arrow function expressions** (`const f = () => {}`) over `function` declarations — enforced by ESLint `func-style`.
 - **Strict TypeScript** via `@tsconfig/strictest` (`moduleResolution: Bundler`). Mind `noUncheckedIndexedAccess` (guard index access) and `verbatimModuleSyntax`.
 - **Zod at the edges** — validate env, workflow input, signal payloads, and HTTP requests; infer types from schemas (single source of truth). Internal layer contracts stay plain TS interfaces.
 - **Config** via `src/infra/config.ts` only (the single reader of `process.env`): `.env` + `.env.local` (both git-ignored) + committed `.env.example`; runs with no env files thanks to defaults.
