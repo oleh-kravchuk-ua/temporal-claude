@@ -118,7 +118,7 @@ zod-validated into a typed `AppConfig`.
   `.env.example` — committed template; copy it to get started: `cp .env.example .env`.
 - Precedence: real env → `.env.local` → `.env` → built-in defaults. **Runs with no env
   files** (defaults: `localhost:7233`, namespace `default`, task queue `ai-agent`).
-- Vars: `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE`, `LOG_LEVEL`,
+- Vars: `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `NODE_ENV`, `LOG_LEVEL`,
   `HTTP_PORT` (3000), `HTTP_HOST` (0.0.0.0), `CORS_ORIGIN` (*), `TEMPORAL_API_KEY`
   (Cloud, via `.env.local`).
 - Logging is structured **pino** at `LOG_LEVEL` (`pino-pretty` in dev). Workflows log via

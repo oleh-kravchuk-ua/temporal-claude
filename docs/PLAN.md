@@ -110,8 +110,9 @@ the rest of the code depends on a typed `AppConfig` (DIP + DRY).
 - **Precedence (highest → lowest):** real `process.env` → `.env.local` → `.env` →
   built-in defaults. The app runs with **no env files at all** thanks to the defaults.
 - Variables: `TEMPORAL_ADDRESS` (default `localhost:7233`), `TEMPORAL_NAMESPACE`
-  (`default`), `TEMPORAL_TASK_QUEUE` (`ai-agent`), `LOG_LEVEL` (`info`), `HTTP_PORT`
+  (`default`), `LOG_LEVEL` (`info`), `NODE_ENV` (`development`), `HTTP_PORT`
   (`3000`), `HTTP_HOST` (`0.0.0.0`), `CORS_ORIGIN` (`*`), `TEMPORAL_API_KEY` (optional, Cloud).
+  The **task queue is not an env var** — it's the `TASK_QUEUE` contract constant.
 - Compose passes env explicitly per service (worker/api/client get `TEMPORAL_ADDRESS=temporal:7233`).
 
 ## Run model

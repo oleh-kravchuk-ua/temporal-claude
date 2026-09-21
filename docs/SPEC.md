@@ -184,24 +184,25 @@ depends on `AppConfig`, never on `process.env` (DIP + DRY).
 ```ts
 // schema is the single source of truth; the type is inferred from it
 export const AppConfigSchema = z.object({
+  nodeEnv: z.enum(['development', 'test', 'production']).default('development'),
   temporalAddress: z.string().min(1).default('localhost:7233'),
   temporalNamespace: z.string().min(1).default('default'),
-  taskQueue: z.string().min(1).default('ai-agent'),
-  logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  temporalApiKey: z.string().min(1).optional(), // set via .env.local for Cloud
   httpPort: z.coerce.number().int().positive().default(3000),
   httpHost: z.string().min(1).default('0.0.0.0'),
   corsOrigin: z.string().min(1).default('*'),
-  temporalApiKey: z.string().min(1).optional(), // set via .env.local for Cloud
+  logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 
-export function loadConfig(): AppConfig; // throws a clear error on invalid env
+export const loadConfig = (env?: Record<string, string | undefined>): AppConfig; // throws on invalid env
 ```
 
-**Env var mapping / precedence:** `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`,
-`TEMPORAL_TASK_QUEUE`, `LOG_LEVEL`, `HTTP_PORT`, `HTTP_HOST`, `CORS_ORIGIN`,
-`TEMPORAL_API_KEY`. Precedence highest→lowest: real `process.env` → `.env.local` → `.env`
-→ schema defaults. Runs with no env files present.
+**Env var mapping / precedence:** `NODE_ENV`, `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`,
+`TEMPORAL_API_KEY`, `HTTP_PORT`, `HTTP_HOST`, `CORS_ORIGIN`, `LOG_LEVEL`. Precedence
+highest→lowest: real `process.env` → `.env.local` → `.env` → schema defaults. Runs with no
+env files present. Loading uses Node's native `util.parseEnv` (no dotenv). **The task queue
+is not config** — it's the `TASK_QUEUE` contract constant (worker and clients share it).
 
 ## 6a-bis. Logging contract (`src/infra/logger.ts`)
 
