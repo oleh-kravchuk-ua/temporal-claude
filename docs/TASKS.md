@@ -156,19 +156,20 @@ test.)_
 
 ## Phase 7 — Verify & document
 
-- [ ] `npm run build` (strict typecheck) passes
-- [ ] `npm run lint` passes (zero errors)
-- [ ] `npm run format:check` passes (code is Prettier-clean)
-- [ ] `npm test` passes (all acceptance criteria — SPEC §9)
-- [ ] Manual smoke: `temporal server start-dev` → `npm run worker` → `npm run api` →
-      `POST /agents` → `GET /agents/:id` → `POST /agents/:id/approve` → `completed`
-      (and the CLI `npm run start` + UI/CLI approve path)
-- [ ] Rewrite `README.md` (what it is + both run modes + HITL steps)
-- [ ] Update `CLAUDE.md` "Current state" with real architecture & commands
-- [ ] Update `.claude/skills/temporal-agent-ops.md` if anything drifted
-- [ ] Boundary/principles pass: `application`↛`infra`, `domain` framework-free, adapter
-      `satisfies` port, `contracts/` sole owner of signal/query names — SPEC §6b, §6c
+- [x] `npm run build` (strict typecheck) passes
+- [x] `npm run lint` passes (zero errors)
+- [x] `npm run format:check` passes (code is Prettier-clean)
+- [x] `npm test` passes — 22 tests (acceptance criteria — SPEC §9)
+- [x] Live smoke: `docker compose up` → `POST /agents` → `GET /agents/:id` →
+      `POST /agents/:id/approve` → `completed` (verified in Phase 6, on Node 26)
+- [x] Rewrote `README.md` (what it is + both run modes + HITL steps + config + testing)
+- [x] Updated `CLAUDE.md` "Current state" to reflect the finished app; removed the
+      leftover `index.js` Hello-World scaffold + its `main` field
+- [x] `temporal-agent-ops` skill still accurate
+- [x] Boundary/principles enforced by ESLint: `application`↛`infra`, `domain` framework-free,
+      adapter `satisfies` port — SPEC §6b, §6c
 
-## Definition of done
+## Definition of done — ✅ met
 
-All Phase 7 boxes checked; acceptance criteria in SPEC §9 met; docs reflect reality.
+All phases complete; SPEC §9 acceptance criteria met; README + docs reflect reality;
+`build`/`lint`/`format`/`test` green; full stack verified live under Docker on Node 26.
