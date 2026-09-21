@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm run test:watch)",
+      "Bash(npm run lint)",
+      "Bash(npm run format)",
+      "Bash(npm run format:check)",
+      "Bash(npm run build)",
+      "Bash(npm run worker)",
+      "Bash(npm run api)",
+      "Bash(npm run start)",
+      "Bash(npm start)",
+      "Bash(npx tsx:*)",
+      "Bash(npx vitest:*)",
+      "Bash(docker compose:*)",
+      "Bash(temporal:*)",
+      "Bash(git status)",
+      "Bash(git diff)",
+      "Bash(git log)",
+      "Bash(git add)",
+      "Bash(git commit)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(rm -rf /)",
+      "Bash(git reset --hard)",
+      "Bash(git clean -fd)",
+      "Bash(git push --force)",
+      "Bash(npm publish)",
+      "Bash(sudo)"
+    ]
+  },
+  "model": "claude-opus-4-8",
+  "enabledPlugins": {
+    "temporal@temporal-marketplace": true
+  }
+}
