@@ -24,7 +24,7 @@
       `format`, `format:check`, `test`, `test:unit` (`vitest run src`), `test:feature`
       (`vitest run features`), `test:watch`, `prepare` (husky)
 - [x] `.env.example` — documents `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`,
-      `TEMPORAL_TASK_QUEUE`, `LOG_LEVEL`, `HTTP_PORT`, `HTTP_HOST`, `CORS_ORIGIN`,
+      `NODE_ENV`, `LOG_LEVEL`, `HTTP_PORT`, `HTTP_HOST`, `CORS_ORIGIN`,
       `TEMPORAL_API_KEY`
 - [x] Confirmed `.gitignore` keeps `.env`/`.env.local` ignored and `.env.example` tracked
 - [x] `husky init`; `.husky/commit-msg` → `npx --no -- commitlint --edit "$1"`;
@@ -69,16 +69,22 @@
 
 ## Phase 3 — Infra (adapters + worker) — SPEC §5, §6a, §8
 
-- [ ] `src/infra/config.ts` — load `.env`/`.env.local`, zod-validate → frozen `AppConfig`
-      (only reader of `process.env`) — SPEC §6a
-- [ ] `src/infra/logger.ts` — shared pino instance from `AppConfig.logLevel`
-      (`pino-pretty` in dev) — SPEC §6a-bis
+- [x] `src/infra/config.ts` — merge `.env`/`.env.local`/`process.env` (native `util.parseEnv`,
+      explicit precedence), zod-validate → frozen `AppConfig` (only reader of `process.env`;
+      `env` injectable for tests) — SPEC §6a
+- [x] `src/infra/logger.ts` — shared pino instance from `AppConfig` (`pino-pretty` unless
+      `nodeEnv === 'production'`) — SPEC §6a-bis
 - [x] `src/infra/activities/ai-tools.ts` — mocked impl `satisfies AiToolsActivities`
-      _(done early during the Phase 1 relayering)_; add pino logging when the logger lands
-- [ ] `src/infra/connection.ts` — `NativeConnection` (worker) + `Client`/`Connection`
-      (api/cli) built from `AppConfig` (address/namespace/API key)
-- [ ] `src/infra/worker.ts` — `loadConfig()` → `Worker.create({ workflowsPath, activities,
-taskQueue })` + run, graceful shutdown on SIGINT/SIGTERM
+      _(done during the Phase 1 relayering)_. No in-activity logging: Temporal's activity
+      `log` throws outside an activity context and would break the isolated unit tests; the
+      worker logs lifecycle instead.
+- [x] `src/infra/connection.ts` — `createWorkerConnection` (`NativeConnection`) +
+      `createClient` (`Connection` + `Client`) from `AppConfig`; TLS + API key when set (Cloud)
+- [x] `src/infra/worker.ts` — `loadConfig()` → `Worker.create` with the workflow path,
+      `aiToolsActivities`, and `TASK_QUEUE`; runs it (SDK handles SIGINT/SIGTERM) and closes
+      the connection on exit
+- [x] verified: `build` (tsc) + `lint` + `format` pass (worker runs against a live server —
+      manual smoke in Phase 7)
 
 ## Phase 4 — Interfaces (client) — SPEC §8
 
