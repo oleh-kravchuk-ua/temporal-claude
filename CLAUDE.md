@@ -6,19 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A small application to test orchestration for running AI tools within [Temporal](https://temporal.io). Concretely: a **human-in-the-loop AI agent** — a Temporal workflow that plans a task, waits for a human to approve the plan (via signals), executes the steps, and synthesizes a result. The "AI" is **mocked** (offline, no API keys); the point is the durable-execution orchestration, not real inference.
 
-## Current state — planning complete, implementation not started
+## Current state — implemented (all phases complete)
 
-The design is fully specified but **no application code exists yet**. `index.js` is still a `console.log`, and `package.json` has only a placeholder `test` script. The four `@temporalio/*` runtime packages are installed; nothing else is.
+The app is built and verified: worker, Fastify REST API, and CLI client all run; **22 tests
+pass** (unit + endpoint e2e), and the full stack runs under Docker Compose. `README.md` is the
+user-facing guide; `docs/{PLAN,SPEC,TASKS}.md` capture the design and (checked-off) build history
+and remain the reference for _why_ things are shaped this way.
 
-**The plan is the source of truth — read it before writing code:**
+- **`docs/SPEC.md`** — the behavioral contract: domain model, workflow state machine,
+  signal/query/activity/HTTP contracts, config/logging contracts, layer-boundary rules.
+- **`docs/PLAN.md`** — architecture, run model, toolchain, Docker decisions.
+- **`docs/TASKS.md`** — the phased build log (all phases checked off).
 
-- **`docs/PLAN.md`** — locked decisions, architecture, run model, toolchain, Docker.
-- **`docs/SPEC.md`** — the behavioral contract: domain model, workflow state machine, signal/query/activity/HTTP contracts (names + payload types), config/logging contracts, layer-boundary rules, principles, acceptance criteria.
-- **`docs/TASKS.md`** — phased, checkboxed build order (Phase 0 → 7). Implement in this order; each task cites the SPEC section it satisfies.
-
-When implementing, follow `docs/TASKS.md` phase by phase and keep it in sync (check boxes off). When the code exists, update this "Current state" section with the real, verified commands.
-
-## Architecture (target — see `docs/PLAN.md`)
+## Architecture (see `docs/PLAN.md`)
 
 Single package, **layered DDD**, dependencies point **inward only**:
 
@@ -32,7 +32,7 @@ src/
 
 Key mental model: **the workflow runs inside the worker**, not a container of its own. The `temporal` server is the cluster; the CLI, the Fastify API, and the Web UI are all just _clients_ that start/signal/query workflows. Human-in-the-loop approval happens via Web UI (`:8233`), Temporal CLI, or the REST API (`:3000`) — there is no bespoke frontend.
 
-## Commands (target — added in Phase 0, not yet present)
+## Commands
 
 | command                           | purpose                                             |
 | --------------------------------- | --------------------------------------------------- |
@@ -46,13 +46,13 @@ Key mental model: **the workflow runs inside the worker**, not a container of it
 
 Local Temporal cluster for manual runs: `temporal server start-dev` (gRPC `:7233`, Web UI `:8233`). Full run + HITL instructions live in the **`temporal-agent-ops`** skill.
 
-## Toolchain / conventions (decided; enforced once wired)
+## Toolchain / conventions
 
 - **ES modules only** (`"type": "module"`) — never `require`/`module.exports`; use `import type` for type-only imports.
 - **Prefer arrow function expressions** (`const f = () => {}`) over `function` declarations — enforced by ESLint `func-style`.
 - **Strict TypeScript** via `@tsconfig/strictest` (`moduleResolution: Bundler`). Mind `noUncheckedIndexedAccess` (guard index access) and `verbatimModuleSyntax`.
 - **Zod at the edges** — validate env, workflow input, signal payloads, and HTTP requests; infer types from schemas (single source of truth). Internal layer contracts stay plain TS interfaces.
-- **Config** via `src/infra/config.ts` only (the single reader of `process.env`): `.env` + `.env.local` (both git-ignored) + committed `.env.example`; runs with no env files thanks to defaults.
+- **Config** via `src/infra/config/` only (the single reader of `process.env`): `.env` + `.env.local` (both git-ignored) + committed `.env.example`; runs with no env files thanks to defaults. The task queue is a code constant (`TASK_QUEUE`), not config.
 - **Logging** via **pino**; workflows must log through `@temporalio/workflow`'s `log` (sinks), never pino directly (determinism).
 - **Boundary rules** (also intended as ESLint `no-restricted-imports`): `application` ↛ `infra`; `domain` imports no framework; `contracts/` is the sole owner of signal/query names; activity adapters `satisfies AiToolsActivities`.
 - **Testing (three tiers):** _smoke_ = manual `curl` checklist (not automated); _unit_ = colocated `*.test.ts` beside the source, collaborators mocked (Vitest + `@temporalio/testing` time-skipping for the workflow); _feature/e2e_ = `features/` at repo root, everything wired for real. Scripts: `test` (all), `test:unit` (`vitest run src`), `test:feature` (`vitest run features`). All automated tiers are self-contained (own test server) — no external cluster/worker needed. Prefer running a single test file while iterating.

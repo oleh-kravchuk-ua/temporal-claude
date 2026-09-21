@@ -13,7 +13,6 @@
   "license": "./LICENSE",
   "author": "Oleh Kravchuk <oleh.kravchuk.ua@gmail.com>",
   "type": "module",
-  "main": "index.js",
   "engines": {
     "node": ">=26"
   },
