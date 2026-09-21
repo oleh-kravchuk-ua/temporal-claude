@@ -47,19 +47,25 @@
 
 ## Phase 2 — Application (workflow + contracts) — SPEC §3, §4, §6, §6b
 
-- [ ] `src/application/contracts.ts` — `TASK_QUEUE`, `approvePlan`/`provideGuidance`/`cancel`
-      signals, `getState` query, `ApprovePlanInput` + zod schemas for signal payloads
+- [x] `src/application/contracts/` — `TASK_QUEUE`, `approvePlan`/`provideGuidance`/`cancel`
+      signals, `getState` query, `ApprovePlanInput` + zod schemas for signal/input payloads
       (single source of truth — DRY)
-- [ ] `src/application/agent.workflow.ts` — `agentWorkflow`:
-  - [ ] zod-validate `AgentInput` at entry — SPEC §6b
-  - [ ] `proxyActivities<AiToolsActivities>` with retry policy (depends on the port, not
+- [x] `src/application/agent-run.class.ts` — `AgentRun` class: run state, signal/query
+      handlers, and the phase pipeline (`execute(activities)` — activities injected, so the
+      class is decoupled from the Temporal proxy and directly testable)
+- [x] `src/application/agent.workflow.ts` — `agentWorkflow` (thin: proxies activities, wires
+      signals/queries to an `AgentRun`, runs it):
+  - [x] zod-validate `AgentInput` at entry — SPEC §6b
+  - [x] `proxyActivities<AiToolsActivities>` with retry policy (depends on the port, not
         infra — DIP) — SPEC §5
-  - [ ] non-async signal handlers with synchronous zod validation of payloads;
+  - [x] non-async signal handlers with synchronous zod validation of payloads;
         read-only `getState` handler — SPEC §7
-  - [ ] state machine: plan → await-approval → (reject/re-plan loop, MAX_REJECTIONS) →
+  - [x] state machine: plan → await-approval → (reject/re-plan loop, MAX_REJECTIONS) →
         execute → synthesize → complete; cancel path — SPEC §6
-  - [ ] guard indexed access for `noUncheckedIndexedAccess` — SPEC §7
-  - [ ] **must not import `infra`** — SPEC §6b
+  - [x] guard indexed access for `noUncheckedIndexedAccess` — SPEC §7
+  - [x] **must not import `infra`** — SPEC §6b
+  - [x] verified: `build` (tsc) + `lint` + `format` pass (execution proof lands with the
+        workflow test — Phase 5)
 
 ## Phase 3 — Infra (adapters + worker) — SPEC §5, §6a, §8
 
@@ -83,7 +89,7 @@ taskQueue })` + run, graceful shutdown on SIGINT/SIGTERM
 ## Phase 4b — HTTP API (Fastify) — SPEC §6d, §6a-bis
 
 - [ ] `src/interfaces/http/schemas.ts` — zod request/params schemas, reusing
-      `contracts.ts` payload schemas where they overlap (DRY)
+      `contracts/` payload schemas where they overlap (DRY)
 - [ ] `src/interfaces/http/routes/agents.ts` — `/agents` start/query/signal/cancel +
       `/healthz`, mapping to the Temporal Client; consistent `{ data }` / `{ error }` envelope
 - [ ] `src/interfaces/http/server.ts` — Fastify bootstrap: pino logger, `@fastify/helmet`,
@@ -141,7 +147,7 @@ taskQueue })` + run, graceful shutdown on SIGINT/SIGTERM
 - [ ] Update `CLAUDE.md` "Current state" with real architecture & commands
 - [ ] Update `.claude/skills/temporal-agent-ops.md` if anything drifted
 - [ ] Boundary/principles pass: `application`↛`infra`, `domain` framework-free, adapter
-      `satisfies` port, `contracts.ts` sole owner of signal/query names — SPEC §6b, §6c
+      `satisfies` port, `contracts/` sole owner of signal/query names — SPEC §6b, §6c
 
 ## Definition of done
 

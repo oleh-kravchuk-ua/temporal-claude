@@ -63,16 +63,17 @@ export interface AgentState {
 }
 ```
 
-**Pure domain functions** (no Temporal, no I/O, deterministic):
+The behavior (the mocked "AI") is NOT in the domain — it lives in the infra activity
+adapter (`infra/activities/ai-tools.ts`, §5) as pure, deterministic functions:
 
 ```ts
-planTask(topic: string, feedback?: string): Plan
-runTool(step: PlanStep, guidance: string[]): StepResult
-synthesize(topic: string, results: StepResult[]): string
+planTask(topic: string, feedback?: string): Promise<Plan>
+runTool(step: PlanStep, guidance: readonly string[]): Promise<StepResult>
+synthesize(topic: string, results: readonly StepResult[]): Promise<string>
 ```
 
-These are what the mocked activities call. Being pure, they are unit-testable with zero
-Temporal machinery.
+Being pure, they are unit-testable with zero Temporal machinery
+(`infra/activities/ai-tools.test.ts`).
 
 ## 3. Workflow I/O (`src/application/agent.workflow.ts`)
 
@@ -91,9 +92,11 @@ export interface AgentResult {
 export async function agentWorkflow(input: AgentInput): Promise<AgentResult>;
 ```
 
-## 4. Contracts (`src/application/contracts.ts`)
+## 4. Contracts (`src/application/contracts/`)
 
-Shared by the workflow and any client (our `client.ts`, the CLI, the Web UI).
+One contract per file under `contracts/` (task-queue, agent-input, agent-result,
+approve-plan, provide-guidance, cancel, get-state), re-exported by `contracts/index.ts`.
+Shared by the workflow and any client (our `client.ts`, the CLI, the HTTP API).
 
 ```ts
 export const TASK_QUEUE = 'ai-agent';
@@ -221,14 +224,14 @@ Contracts are explicit at every seam; dependencies point **inward only**
 | Domain model    | types in `domain/types.ts`                                    | all layers                             | TS types + `strictest`                            |
 | Activity port   | `AiToolsActivities` (`application/ports.ts`)                  | workflow (proxy), infra adapter (impl) | TS interface; adapter must `satisfies` it         |
 | Workflow API    | `AgentInput`, `AgentResult` (`application/agent.workflow.ts`) | CLI, HTTP API, tests                   | zod-validate `AgentInput` at workflow entry       |
-| Signals/queries | defs + payload types (`application/contracts.ts`)             | workflow, CLI, HTTP API, UI            | zod-validate payloads in handlers (external JSON) |
+| Signals/queries | defs + payload types (`application/contracts/`)               | workflow, CLI, HTTP API, UI            | zod-validate payloads in handlers (external JSON) |
 | HTTP API        | REST endpoints (`interfaces/http`) — see §6d                  | external HTTP callers                  | zod-validate request body/params; helmet + cors   |
 
 **Rules:**
 
 - `application` must **not** import `infra` (workflow proxies the _port_, not the impl).
 - `domain` imports nothing from `application`/`infra`/`@temporalio/*`.
-- `contracts.ts` is the **single source** of signal/query names and payload types (DRY) —
+- `contracts/` is the **single source** of signal/query names and payload types (DRY) —
   the client and the ops runbook reference it, never re-declare names.
 - The infra adapter is typed `satisfies AiToolsActivities` so the port and impl can't drift.
 - External JSON (signal payloads, `AgentInput`) is **parsed with zod at the boundary**;
@@ -256,7 +259,7 @@ Not slogans — each maps to something checkable in review:
 ## 6d. HTTP API contract (`src/interfaces/http`)
 
 A **Fastify** app that is a Temporal **Client** (not a worker — it hosts no workflow code).
-It maps REST calls onto the same signals/queries in `contracts.ts`. Thin adapter: no
+It maps REST calls onto the same signals/queries in `contracts/`. Thin adapter: no
 business logic, no state; every handler just validates input and calls the Temporal Client.
 
 **Cross-cutting:** `@fastify/helmet` (security headers) + `@fastify/cors` (origin from
@@ -278,7 +281,7 @@ business logic, no state; every handler just validates input and calls the Tempo
 
 - Signals are fire-and-forget → `202 Accepted` (a signal cannot report workflow outcome).
 - Request schemas live in `interfaces/http/schemas.ts` and **reuse** the payload schemas
-  from `contracts.ts` where they overlap (e.g. `ApprovePlanInput`) — DRY, no re-declaring.
+  from `contracts/` where they overlap (e.g. `ApprovePlanInput`) — DRY, no re-declaring.
 - Map Temporal errors to HTTP: workflow-not-found → `404`; validation → `400`; else `500`
   with a generic message (no internal details leaked — see §7).
 - The API depends only on `application/contracts` + `infra` (Client, config, logger); it
