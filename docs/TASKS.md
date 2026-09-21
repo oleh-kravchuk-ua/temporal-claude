@@ -88,9 +88,11 @@
 
 ## Phase 4 — Interfaces (client) — SPEC §8
 
-- [ ] `src/interfaces/cli/client.ts` — `loadConfig()`, start `agentWorkflow`, print workflow
-      id + how to approve (Web UI / CLI / API hints), exit (start-only). Depends only on
-      `application/contracts` + infra Client/config — not on `infra/activities` or `domain`
+- [x] `src/interfaces/cli/client.ts` — `loadConfig()` → `createClient` →
+      `client.workflow.start(agentWorkflow, …)`, prints the workflow id + how to approve
+      (Web UI / CLI / API hints), closes the connection, exits (start-only). Optional topic
+      via `npm run start -- "topic"`. Depends only on `application` + infra client/config.
+      Verified: `build` + `lint` + `format` pass (live smoke in Phase 7).
 
 ## Phase 4b — HTTP API (Fastify) — SPEC §6d, §6a-bis
 
