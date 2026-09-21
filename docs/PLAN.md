@@ -46,8 +46,10 @@ src/
 │   └── index.ts                #   barrel re-export
 ├── application/                # orchestration = workflows + the ports it needs
 │   ├── ports.ts                #   AiToolsActivities port (the workflow's dependency contract)
-│   ├── contracts.ts            #   TASK_QUEUE + signal/query definitions
-│   └── agent.workflow.ts       #   agentWorkflow (proxies the port, handles signals/queries)
+│   ├── contracts/              #   one contract per file (+ barrel): task-queue, agent-input,
+│   │                           #     agent-result, approve-plan, provide-guidance, cancel, get-state
+│   ├── agent-run.class.ts      #   AgentRun — run state + phase pipeline (activities injected)
+│   └── agent.workflow.ts       #   agentWorkflow — wires signals/queries to AgentRun, proxies activities
 ├── infra/                      # Temporal basics + adapters
 │   ├── activities/ai-tools.ts  #   mocked impl `satisfies AiToolsActivities` (real = LLM I/O)
 │   ├── config.ts               #   loads .env/.env.local, zod-validates → typed AppConfig
@@ -95,7 +97,7 @@ workflow code.
 
 **Three ways to drive HITL:** Temporal Web UI (`:8233`), Temporal CLI, and our **Fastify
 REST API** (`:3000`). All three are clients issuing the same signals/queries defined in
-`application/contracts.ts`.
+`application/contracts/`.
 
 ## Configuration
 
