@@ -5,6 +5,18 @@
 #   docker compose up                 # temporal + worker + api
 #   docker compose run --rm client    # start one workflow, print its id, exit
 #   Web UI: http://localhost:8233   ·   REST API: http://localhost:3000
+#
+# App config: each service loads `.env` then `.env.local` (optional — absent in CI/fresh
+# clones) via `env_file`, so LOG_LEVEL / CORS_ORIGIN / TEMPORAL_API_KEY etc. come from there.
+# The `environment:` block then OVERRIDES the values that must differ inside the compose
+# network (TEMPORAL_ADDRESS uses the `temporal` service DNS, not localhost).
+
+x-app-env: &app-env
+  env_file:
+    - path: .env
+      required: false
+    - path: .env.local
+      required: false
 
 services:
   temporal:
@@ -22,6 +34,7 @@ services:
   worker:
     build: .
     command: ['npm', 'run', 'worker']
+    <<: *app-env
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       NODE_ENV: production
@@ -32,6 +45,7 @@ services:
   api:
     build: .
     command: ['npm', 'run', 'api']
+    <<: *app-env
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       HTTP_HOST: 0.0.0.0
@@ -46,6 +60,7 @@ services:
     build: .
     command: ['npm', 'run', 'start']
     profiles: ['tools']
+    <<: *app-env
     environment:
       TEMPORAL_ADDRESS: temporal:7233
     depends_on:
