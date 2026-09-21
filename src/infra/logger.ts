@@ -6,14 +6,16 @@
  * (sinks) to stay deterministic. See SPEC §6a-bis.
  */
 
-import { pino, type Logger } from 'pino';
+import { pino, type Logger, type LoggerOptions } from 'pino';
 
 import type { AppConfig } from './config';
 
-export const createLogger = (config: AppConfig): Logger =>
-  pino({
-    level: config.logLevel,
-    ...(config.nodeEnv === 'production'
-      ? {}
-      : { transport: { target: 'pino-pretty', options: { colorize: true } } }),
-  });
+/** pino options derived from config — shared so Fastify and the worker/CLI log identically. */
+export const loggerOptions = (config: AppConfig): LoggerOptions => ({
+  level: config.logLevel,
+  ...(config.nodeEnv === 'production'
+    ? {}
+    : { transport: { target: 'pino-pretty', options: { colorize: true } } }),
+});
+
+export const createLogger = (config: AppConfig): Logger => pino(loggerOptions(config));
