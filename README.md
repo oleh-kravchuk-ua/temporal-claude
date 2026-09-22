@@ -67,6 +67,9 @@ flowchart LR
 npm install
 ```
 
+> **New here?** [`docs/PLAYBOOK.md`](docs/PLAYBOOK.md) has copy-paste steps to run, play
+> through every scenario (approve / reject / cancel / guidance), and run the tests.
+
 ## Run it — Docker (one command)
 
 ```bash
