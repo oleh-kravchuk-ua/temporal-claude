@@ -3,3 +3,10 @@ coverage
 node_modules
 package-lock.json
 .husky
+skills-lock.json
+
+# Vendored agent skills (Osmani AI-skills) — kept identical to upstream
+.agents/skills/
+
+# Local, machine-specific settings (git-ignored)
+.claude/settings.local.json
