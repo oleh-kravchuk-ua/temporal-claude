@@ -88,6 +88,7 @@ export class AgentRun {
 
   /** Drive the run to a terminal result, using the injected activities. */
   async execute(activities: AiToolsActivities): Promise<AgentResult> {
+    log.info('Agent run started', { topic: this.topic });
     const planning = await this.planUntilApproved(activities);
     if (planning !== 'approved') {
       return this.finish(planning);
@@ -108,6 +109,10 @@ export class AgentRun {
       this.revision += 1;
       this.plan = await activities.planTask(this.topic, this.feedback);
       this.status = 'awaiting_approval';
+      log.info('Awaiting plan approval', {
+        revision: this.revision,
+        steps: this.plan.steps.length,
+      });
 
       await condition(() => this.pendingApproval !== undefined || this.cancelled);
       if (this.cancelled) {
@@ -120,13 +125,16 @@ export class AgentRun {
       }
       if (decision.approved) {
         this.status = 'executing';
+        log.info('Plan approved; executing');
         return 'approved';
       }
 
       this.rejections += 1;
       if (this.rejections >= MAX_REJECTIONS) {
+        log.info('Rejection limit reached', { rejections: this.rejections });
         return 'rejected';
       }
+      log.info('Plan rejected; re-planning', { rejections: this.rejections });
       this.feedback = decision.feedback;
     }
   }
@@ -142,6 +150,7 @@ export class AgentRun {
         return 'cancelled';
       }
       this.currentStepId = step.id;
+      log.debug('Executing step', { stepId: step.id, tool: step.tool });
       this.results.push(await activities.runTool(step, this.guidance));
     }
     this.currentStepId = undefined;
@@ -150,6 +159,7 @@ export class AgentRun {
 
   private async synthesizeAnswer(activities: AiToolsActivities): Promise<void> {
     this.status = 'synthesizing';
+    log.info('Synthesizing final answer', { steps: this.results.length });
     this.finalAnswer = await activities.synthesize(this.topic, this.results);
   }
 
@@ -162,6 +172,11 @@ export class AgentRun {
 
   private finish(status: AgentResult['status']): AgentResult {
     this.status = status;
+    log.info('Agent run finished', {
+      status,
+      revision: this.revision,
+      stepCount: this.results.length,
+    });
     return {
       status,
       revision: this.revision,

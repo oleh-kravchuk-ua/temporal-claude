@@ -42,7 +42,7 @@ const run = async (): Promise<void> => {
   const { client, connection } = await createClient(config);
   try {
     const handle = await client.workflow.start(agentWorkflow, {
-      taskQueue: config.taskQueue,
+      taskQueue: config.temporal.taskQueue,
       workflowId,
       args: [{ topic }],
     });

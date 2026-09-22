@@ -74,10 +74,10 @@
       `env` injectable for tests) — SPEC §6a
 - [x] `src/infra/logger.ts` — shared pino instance from `AppConfig` (`pino-pretty` unless
       `nodeEnv === 'production'`) — SPEC §6a-bis
-- [x] `src/infra/activities/ai-tools.ts` — mocked impl `satisfies AiToolsActivities`
-      _(done during the Phase 1 relayering)_. No in-activity logging: Temporal's activity
-      `log` throws outside an activity context and would break the isolated unit tests; the
-      worker logs lifecycle instead.
+- [x] `src/infra/activities/ai-tools.ts` — `createAiToolsActivities(logger)` factory
+      `satisfies AiToolsActivities`; logs via the **injected** pino logger (not
+      `@temporalio/activity`'s `log`, which throws outside an activity context) — keeps the
+      activities directly unit-testable while logging in production.
 - [x] `src/infra/connection.ts` — `createWorkerConnection` (`NativeConnection`) +
       `createClient` (`Connection` + `Client`) from `AppConfig`; TLS + API key when set (Cloud)
 - [x] `src/infra/worker.ts` — `loadConfig()` → `Worker.create` with the workflow path,

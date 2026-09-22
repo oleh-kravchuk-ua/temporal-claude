@@ -10,7 +10,7 @@ import type { Plan, PlanStep, StepResult } from '../domain';
  * async because they run as Temporal activities.
  */
 export interface AiToolsActivities {
-  planTask(topic: string, feedback?: string): Promise<Plan>;
-  runTool(step: PlanStep, guidance: readonly string[]): Promise<StepResult>;
-  synthesize(topic: string, results: readonly StepResult[]): Promise<string>;
+  planTask: (topic: string, feedback?: string) => Promise<Plan>;
+  runTool: (step: PlanStep, guidance: readonly string[]) => Promise<StepResult>;
+  synthesize: (topic: string, results: readonly StepResult[]) => Promise<string>;
 }

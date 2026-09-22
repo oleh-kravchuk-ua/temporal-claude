@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { readEnv } from './parse-env';
+import { readEnv } from './read-env';
 import { AppConfigSchema, type RawEnv, type AppConfig } from './types';
 
 /**
@@ -10,14 +10,20 @@ import { AppConfigSchema, type RawEnv, type AppConfig } from './types';
 export const loadConfig = (env: RawEnv = readEnv()): AppConfig => {
   const result = AppConfigSchema.safeParse({
     nodeEnv: env['NODE_ENV'],
-    temporalAddress: env['TEMPORAL_ADDRESS'],
-    temporalNamespace: env['TEMPORAL_NAMESPACE'],
-    taskQueue: env['TEMPORAL_TASK_QUEUE'],
-    temporalApiKey: env['TEMPORAL_API_KEY'],
-    httpPort: env['HTTP_PORT'],
-    httpHost: env['HTTP_HOST'],
-    corsOrigin: env['CORS_ORIGIN'],
     logLevel: env['LOG_LEVEL'],
+    http: {
+      port: env['HTTP_PORT'],
+      host: env['HTTP_HOST'],
+    },
+    corsOrigin: env['CORS_ORIGIN'],
+    temporal: {
+      connection: {
+        address: env['TEMPORAL_ADDRESS'],
+        namespace: env['TEMPORAL_NAMESPACE'],
+        apiKey: env['TEMPORAL_API_KEY'],
+      },
+      taskQueue: env['TEMPORAL_TASK_QUEUE'],
+    },
   });
 
   if (!result.success) {

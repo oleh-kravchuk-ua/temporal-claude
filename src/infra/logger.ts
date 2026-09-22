@@ -13,6 +13,15 @@ import type { AppConfig } from './config';
 /** pino options derived from config — shared so Fastify and the worker/CLI log identically. */
 export const loggerOptions = (config: AppConfig): LoggerOptions => ({
   level: config.logLevel,
+  // Never log secrets/credentials, wherever a request or headers object is logged.
+  redact: [
+    'req.headers.authorization',
+    'req.headers.cookie',
+    'headers.authorization',
+    'headers.cookie',
+    'apiKey',
+    'temporalApiKey',
+  ],
   ...(config.nodeEnv === 'production'
     ? {}
     : { transport: { target: 'pino-pretty', options: { colorize: true } } }),

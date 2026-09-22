@@ -6,6 +6,7 @@
 
 import { loadConfig } from '../../infra/config';
 import { loggerOptions } from '../../infra/logger';
+import { installProcessErrorHandlers } from '../../infra/process-errors';
 import { createClient } from '../../infra/temporal';
 import { buildApp } from './app';
 
@@ -15,10 +16,12 @@ const start = async (): Promise<void> => {
 
   const app = await buildApp({
     client,
-    taskQueue: config.taskQueue,
+    taskQueue: config.temporal.taskQueue,
     corsOrigin: config.corsOrigin,
     logger: loggerOptions(config),
   });
+
+  installProcessErrorHandlers(app.log);
 
   const shutdown = async (): Promise<void> => {
     await app.close();
@@ -27,7 +30,7 @@ const start = async (): Promise<void> => {
   process.on('SIGINT', () => void shutdown());
   process.on('SIGTERM', () => void shutdown());
 
-  await app.listen({ host: config.httpHost, port: config.httpPort });
+  await app.listen({ host: config.http.host, port: config.http.port });
 };
 
 start().catch((error: unknown) => {

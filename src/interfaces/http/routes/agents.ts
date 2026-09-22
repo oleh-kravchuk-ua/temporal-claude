@@ -43,6 +43,7 @@ export const registerAgentRoutes = (
     const workflowId = `agent-${randomUUID()}`;
 
     await client.workflow.start(agentWorkflow, { taskQueue, workflowId, args: [{ topic }] });
+    request.log.info({ workflowId, topic }, 'Started agent workflow');
 
     return reply.code(201).send({ data: { workflowId } });
   });
@@ -62,6 +63,7 @@ export const registerAgentRoutes = (
     const decision = ApproveBodySchema.parse(request.body);
 
     await client.workflow.getHandle(id).signal(approvePlan, decision);
+    request.log.info({ id, approved: decision.approved }, 'Signalled approvePlan');
 
     return reply.code(202).send();
   });
@@ -72,6 +74,7 @@ export const registerAgentRoutes = (
     const { guidance } = GuidanceBodySchema.parse(request.body);
 
     await client.workflow.getHandle(id).signal(provideGuidance, guidance);
+    request.log.info({ id }, 'Signalled provideGuidance');
 
     return reply.code(202).send();
   });
@@ -81,6 +84,7 @@ export const registerAgentRoutes = (
     const { id } = AgentParamsSchema.parse(request.params);
 
     await client.workflow.getHandle(id).signal(cancelAgent);
+    request.log.info({ id }, 'Signalled cancel');
 
     return reply.code(202).send();
   });
