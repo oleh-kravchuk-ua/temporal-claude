@@ -5,10 +5,20 @@ A workflow plans a task, **waits for a human to approve the plan**, executes the
 steps, and synthesizes a result. The "AI" is **mocked** (deterministic, offline, no API
 keys) — the point is durable, human-in-the-loop orchestration, not real inference.
 
-```
-plan ──▶ AWAIT human approval ──▶ execute steps ──▶ synthesize ──▶ done
-             │  (reject → re-plan, up to 3×)
-             └─ cancel ends the run from any wait point
+```mermaid
+stateDiagram-v2
+    [*] --> planning
+    planning --> awaiting_approval
+    awaiting_approval --> planning: reject + feedback (< 3×)
+    awaiting_approval --> rejected: reject (3rd time)
+    awaiting_approval --> executing: approve
+    executing --> synthesizing
+    synthesizing --> completed
+    awaiting_approval --> cancelled: cancel
+    executing --> cancelled: cancel
+    completed --> [*]
+    rejected --> [*]
+    cancelled --> [*]
 ```
 
 ## Architecture
@@ -28,6 +38,24 @@ server is the cluster (orchestration + durable history + Web UI). The CLI, the R
 the Web UI are all just _clients_ that start/signal/query workflows. The workflow depends on
 the `AiToolsActivities` **port**; the mocked implementation lives in `infra/activities` — swap
 it for a real LLM call without touching the workflow.
+
+```mermaid
+flowchart LR
+    subgraph clients [Clients]
+        cli[CLI client]
+        api[Fastify REST API]
+        ui[Web UI]
+    end
+    temporal[(Temporal server<br/>orchestration + history)]
+    subgraph worker [Worker process]
+        wf[agentWorkflow] --> act[AI-tools activities]
+    end
+
+    cli -- start / signal / query --> temporal
+    api -- start / signal / query --> temporal
+    ui -- signal / query --> temporal
+    temporal <-- poll tasks / results --> worker
+```
 
 ## Prerequisites
 
@@ -101,14 +129,16 @@ so it **runs with no env files at all**. Copy `.env.example` to `.env` to custom
 | ------------------------- | ------------------ | ---------------------------------------------------- |
 | `TEMPORAL_ADDRESS`        | `localhost:7233`   | Temporal gRPC endpoint                               |
 | `TEMPORAL_NAMESPACE`      | `default`          | namespace                                            |
+| `TEMPORAL_TASK_QUEUE`     | `ai-agent`         | task queue the worker polls / clients target         |
 | `TEMPORAL_API_KEY`        | —                  | set in `.env.local` for Temporal Cloud (enables TLS) |
 | `HTTP_PORT` / `HTTP_HOST` | `3000` / `0.0.0.0` | REST API bind                                        |
 | `CORS_ORIGIN`             | `*`                | allowed CORS origin                                  |
 | `LOG_LEVEL`               | `info`             | pino level                                           |
 | `NODE_ENV`                | `development`      | `production` → JSON logs                             |
 
-The task queue is a code constant (`TASK_QUEUE`), not config. Dev → Temporal Cloud is a
-config change (address + `TEMPORAL_API_KEY`), not a code change.
+`AppConfig` is grouped by concern (`http.*`, `temporal.connection.*`, `temporal.taskQueue`);
+the flat env vars above map onto it. Dev → Temporal Cloud is a config change (address +
+`TEMPORAL_API_KEY`), not a code change.
 
 ## Testing
 
@@ -136,4 +166,6 @@ No dev server or worker needed.
 
 Strict TypeScript (`@tsconfig/strictest`), ESLint (type-aware + enforced layer boundaries),
 Prettier, Vitest, zod (edge validation), pino (logging), Fastify (API), husky + commitlint
-(Conventional Commits). See `docs/{PLAN,SPEC,TASKS}.md` for the design and build history.
+(Conventional Commits). The long-lived processes (worker, API) install
+`unhandledRejection`/`uncaughtException` handlers that log and exit non-zero so a supervisor
+restarts them cleanly. See `docs/{PLAN,SPEC,TASKS}.md` for the design and build history.

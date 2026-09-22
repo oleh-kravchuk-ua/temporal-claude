@@ -11,7 +11,9 @@ import { Worker, bundleWorkflowCode, type WorkflowBundle } from '@temporalio/wor
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { aiToolsActivities } from '../src/infra/activities/ai-tools';
+import { pino } from 'pino';
+
+import { createAiToolsActivities } from '../src/infra/activities/ai-tools';
 import { buildApp } from '../src/interfaces/http/app';
 
 const TASK_QUEUE = 'test';
@@ -30,7 +32,7 @@ beforeAll(async () => {
     connection: env.nativeConnection,
     taskQueue: TASK_QUEUE,
     workflowBundle: bundle,
-    activities: aiToolsActivities,
+    activities: createAiToolsActivities(pino({ level: 'silent' })),
   });
   workerRun = worker.run();
   app = await buildApp({ client: env.client, taskQueue: TASK_QUEUE, corsOrigin: '*' });

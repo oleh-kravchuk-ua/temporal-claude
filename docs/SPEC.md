@@ -94,13 +94,12 @@ export async function agentWorkflow(input: AgentInput): Promise<AgentResult>;
 
 ## 4. Contracts (`src/application/contracts/`)
 
-One contract per file under `contracts/` (task-queue, agent-input, agent-result,
-approve-plan, provide-guidance, cancel, get-state), re-exported by `contracts/index.ts`.
-Shared by the workflow and any client (our `client.ts`, the CLI, the HTTP API).
+One contract per file under `contracts/` (agent-input, agent-result, approve-plan,
+provide-guidance, cancel, get-state), re-exported by `contracts/index.ts`. Shared by the
+workflow and any client (the CLI, the HTTP API). The task queue is **config**
+(`config.temporal.taskQueue`, env `TEMPORAL_TASK_QUEUE`), not a contract.
 
 ```ts
-export const TASK_QUEUE = 'ai-agent';
-
 // Signals
 export const approvePlan = defineSignal<[ApprovePlanInput]>('approvePlan');
 export const provideGuidance = defineSignal<[string]>('provideGuidance');
@@ -175,23 +174,30 @@ Initial: `{ status: 'planning', topic, revision: 1, results: [], guidance: [] }`
 
 Terminal states: `completed`, `rejected`, `cancelled`.
 
-## 6a. Configuration contract (`src/infra/config.ts`)
+## 6a. Configuration contract (`src/infra/config`)
 
 The **only** module that reads `process.env`. Loads `.env` then `.env.local` (local
 overrides base), then zod-validates into a typed, frozen `AppConfig`. Everything else
 depends on `AppConfig`, never on `process.env` (DIP + DRY).
 
 ```ts
-// schema is the single source of truth; the type is inferred from it
+// schema is the single source of truth; the type is inferred from it. Grouped by concern.
 export const AppConfigSchema = z.object({
   nodeEnv: z.enum(['development', 'test', 'production']).default('development'),
-  temporalAddress: z.string().min(1).default('localhost:7233'),
-  temporalNamespace: z.string().min(1).default('default'),
-  temporalApiKey: z.string().min(1).optional(), // set via .env.local for Cloud
-  httpPort: z.coerce.number().int().positive().default(3000),
-  httpHost: z.string().min(1).default('0.0.0.0'),
-  corsOrigin: z.string().min(1).default('*'),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  http: z.object({
+    port: z.coerce.number().int().positive().default(3000),
+    host: z.string().min(1).default('0.0.0.0'),
+  }),
+  corsOrigin: z.string().min(1).default('*'),
+  temporal: z.object({
+    connection: z.object({
+      address: z.string().min(1).default('localhost:7233'),
+      namespace: z.string().min(1).default('default'),
+      apiKey: z.string().min(1).optional(), // set via .env.local for Cloud
+    }),
+    taskQueue: z.string().min(1).default('ai-agent'),
+  }),
 });
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 
@@ -199,19 +205,32 @@ export const loadConfig = (env?: Record<string, string | undefined>): AppConfig;
 ```
 
 **Env var mapping / precedence:** `NODE_ENV`, `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`,
-`TEMPORAL_API_KEY`, `HTTP_PORT`, `HTTP_HOST`, `CORS_ORIGIN`, `LOG_LEVEL`. Precedence
-highest→lowest: real `process.env` → `.env.local` → `.env` → schema defaults. Runs with no
-env files present. Loading uses Node's native `util.parseEnv` (no dotenv). **The task queue
-is not config** — it's the `TASK_QUEUE` contract constant (worker and clients share it).
+`TEMPORAL_API_KEY`, `TEMPORAL_TASK_QUEUE`, `HTTP_PORT`, `HTTP_HOST`, `CORS_ORIGIN`,
+`LOG_LEVEL` (flat env vars map to the grouped `AppConfig` above). Precedence highest→lowest:
+real `process.env` → `.env.local` → `.env` → schema defaults. Runs with no env files
+present. Loading uses Node's native `util.parseEnv` (no dotenv).
 
 ## 6a-bis. Logging contract (`src/infra/logger.ts`)
 
-A single shared **pino** instance, level from `AppConfig.logLevel`, is the logging seam.
+**pino** is the logging seam — `loggerOptions(config)` derives options from `AppConfig`
+(shared so every process logs identically); level from `logLevel`.
 
-- **Activities, worker, CLI, API** use this pino logger (or Fastify's built-in pino, which
-  is configured from the same level).
-- **Workflows** must NOT use pino or any direct I/O — they log via `import { log } from
-'@temporalio/workflow'` (routed through sinks). This preserves determinism (§7).
+- **Worker** builds a pino logger via `createLogger(config)`.
+- **Activities** receive the logger **by injection** — `createAiToolsActivities(logger)` —
+  rather than `@temporalio/activity`'s `log` (which throws outside an activity context), so
+  they log in production yet stay directly unit-testable. Logs include business context
+  (topic, stepId/tool).
+- **API** — Fastify is built with `loggerOptions(config)`. One access-log line per request
+  (`onResponse` hook: method/url/statusCode, `responseTimeMs` = total execution time, and a
+  memory snapshot `rssMB`/`heapUsedMB`; Fastify's default two-line logging is disabled). `reqId` comes from an inbound `x-request-id` header when present (else a uuid)
+  and tags both the access line and the handler's own `request.log` lines. Secrets are redacted
+  via pino `redact` (`authorization`, `cookie`, `apiKey`, `temporalApiKey`).
+- **Workflow** (`AgentRun`) must NOT use pino or any direct I/O — it logs phase transitions
+  via `import { log } from '@temporalio/workflow'` (message-first API, routed through sinks).
+  This preserves determinism (§7).
+- **Levels:** `info` for business milestones (run started/awaiting/approved/finished, handler
+  actions); `debug` for verbose per-step/per-activity detail (each `planTask`/`runTool`/
+  `synthesize`, "Executing step") — hidden at the default `info`, shown with `LOG_LEVEL=debug`.
 - `pino-pretty` is a dev-only transport for readable local output; JSON in production.
 
 ## 6b. Contracts & layer boundaries (strict)
@@ -221,7 +240,7 @@ Contracts are explicit at every seam; dependencies point **inward only**
 
 | Seam            | Contract (owner)                                              | Consumers                              | Strictness                                        |
 | --------------- | ------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------- |
-| Config          | `AppConfig` + `AppConfigSchema` (`infra/config.ts`)           | worker, client, connection             | zod at load (runtime)                             |
+| Config          | `AppConfig` + `AppConfigSchema` (`infra/config`)              | worker, client, connection             | zod at load (runtime)                             |
 | Domain model    | types in `domain/types.ts`                                    | all layers                             | TS types + `strictest`                            |
 | Activity port   | `AiToolsActivities` (`application/ports.ts`)                  | workflow (proxy), infra adapter (impl) | TS interface; adapter must `satisfies` it         |
 | Workflow API    | `AgentInput`, `AgentResult` (`application/agent.workflow.ts`) | CLI, HTTP API, tests                   | zod-validate `AgentInput` at workflow entry       |

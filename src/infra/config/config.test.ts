@@ -1,34 +1,60 @@
 import { describe, it, expect } from 'vitest';
 
 import { loadConfig } from './index';
+import { type AppConfig } from './types';
 
 describe('loadConfig', () => {
   it('returns defaults for an empty environment (runs with no env files)', () => {
-    const config = loadConfig({});
-    expect(config).toMatchObject({
+    const expected: AppConfig = {
       nodeEnv: 'development',
-      temporalAddress: 'localhost:7233',
-      temporalNamespace: 'default',
-      taskQueue: 'ai-agent',
-      httpPort: 3000,
-      httpHost: '0.0.0.0',
+      temporal: {
+        connection: {
+          address: 'localhost:7233',
+          namespace: 'default',
+          apiKey: undefined,
+        },
+        taskQueue: 'ai-agent',
+      },
+      http: {
+        port: 3000,
+        host: '0.0.0.0',
+      },
       corsOrigin: '*',
       logLevel: 'info',
-    });
-    expect(config.temporalApiKey).toBeUndefined();
+    };
+
+    const config = loadConfig({});
+
+    expect(config).toMatchObject(expected);
+    expect(config.temporal.connection.apiKey).toBeUndefined();
   });
 
   it('reads provided values (real env overrides defaults) and coerces types', () => {
+    const temporal = {
+      connection: {
+        address: 'my.namespace.tmprl.cloud:7233',
+        namespace: 'my-namespace',
+        apiKey: 'secret',
+      },
+      taskQueue: 'my-task-queue',
+    };
+    const logLevel = 'debug';
+    const port = 8080;
+
     const config = loadConfig({
-      TEMPORAL_ADDRESS: 'my.namespace.tmprl.cloud:7233',
-      TEMPORAL_API_KEY: 'secret',
-      LOG_LEVEL: 'debug',
-      HTTP_PORT: '8080',
+      TEMPORAL_ADDRESS: temporal.connection.address,
+      TEMPORAL_API_KEY: temporal.connection.apiKey,
+      TEMPORAL_NAMESPACE: temporal.connection.namespace,
+      TEMPORAL_TASK_QUEUE: temporal.taskQueue,
+      LOG_LEVEL: logLevel,
+      HTTP_PORT: port.toString(),
     });
-    expect(config.temporalAddress).toBe('my.namespace.tmprl.cloud:7233');
-    expect(config.temporalApiKey).toBe('secret');
-    expect(config.logLevel).toBe('debug');
-    expect(config.httpPort).toBe(8080);
+    expect(config.temporal.connection.address).toBe(temporal.connection.address);
+    expect(config.temporal.connection.apiKey).toBe(temporal.connection.apiKey);
+    expect(config.temporal.connection.namespace).toBe(temporal.connection.namespace);
+    expect(config.temporal.taskQueue).toBe(temporal.taskQueue);
+    expect(config.logLevel).toBe(logLevel);
+    expect(config.http.port).toBe(port);
   });
 
   it('throws on invalid values', () => {

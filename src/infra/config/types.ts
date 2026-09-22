@@ -13,14 +13,20 @@ import { z } from 'zod';
 
 export const AppConfigSchema = z.object({
   nodeEnv: z.enum(['development', 'test', 'production']).default('development'),
-  temporalAddress: z.string().min(1).default('localhost:7233'),
-  temporalNamespace: z.string().min(1).default('default'),
-  taskQueue: z.string().min(1).default('ai-agent'),
-  temporalApiKey: z.string().min(1).optional(),
-  httpPort: z.coerce.number().int().positive().default(3000),
-  httpHost: z.string().min(1).default('0.0.0.0'),
-  corsOrigin: z.string().min(1).default('*'),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  http: z.object({
+    port: z.coerce.number().int().positive().default(3000),
+    host: z.string().min(1).default('0.0.0.0'),
+  }),
+  corsOrigin: z.string().min(1).default('*'),
+  temporal: z.object({
+    connection: z.object({
+      address: z.string().min(1).default('localhost:7233'),
+      namespace: z.string().min(1).default('default'),
+      apiKey: z.string().min(1).optional(),
+    }),
+    taskQueue: z.string().min(1).default('ai-agent'),
+  }),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

@@ -8,28 +8,30 @@ import { fileURLToPath } from 'node:url';
 
 import { Worker } from '@temporalio/worker';
 
-import { aiToolsActivities } from './activities/ai-tools';
+import { createAiToolsActivities } from './activities/ai-tools';
 import { loadConfig } from './config';
-import { createWorkerConnection } from './temporal';
 import { createLogger } from './logger';
+import { installProcessErrorHandlers } from './process-errors';
+import { createWorkerConnection } from './temporal';
 
 const run = async (): Promise<void> => {
   const config = loadConfig();
   const logger = createLogger(config);
+  installProcessErrorHandlers(logger);
   const connection = await createWorkerConnection(config);
 
   try {
     const worker = await Worker.create({
       connection,
-      namespace: config.temporalNamespace,
-      taskQueue: config.taskQueue,
+      namespace: config.temporal.connection.namespace,
+      taskQueue: config.temporal.taskQueue,
       // Temporal bundles the workflow file separately; point it at the module path.
       workflowsPath: fileURLToPath(new URL('../application/agent.workflow.ts', import.meta.url)),
-      activities: aiToolsActivities,
+      activities: createAiToolsActivities(logger),
     });
 
     logger.info(
-      { taskQueue: config.taskQueue, address: config.temporalAddress },
+      { taskQueue: config.temporal.taskQueue, address: config.temporal.connection.address },
       'Worker started; polling for tasks',
     );
     // Worker.run() handles SIGINT/SIGTERM for graceful shutdown.

@@ -46,23 +46,26 @@ src/
 │   └── index.ts                #   barrel re-export
 ├── application/                # orchestration = workflows + the ports it needs
 │   ├── ports.ts                #   AiToolsActivities port (the workflow's dependency contract)
-│   ├── contracts/              #   one contract per file (+ barrel): task-queue, agent-input,
-│   │                           #     agent-result, approve-plan, provide-guidance, cancel, get-state
+│   ├── contracts/              #   one contract per file (+ barrel): agent-input, agent-result,
+│   │                           #     approve-plan, provide-guidance, cancel, get-state
 │   ├── agent-run.class.ts      #   AgentRun — run state + phase pipeline (activities injected)
 │   └── agent.workflow.ts       #   agentWorkflow — wires signals/queries to AgentRun, proxies activities
 ├── infra/                      # Temporal basics + adapters
 │   ├── activities/ai-tools.ts  #   mocked impl `satisfies AiToolsActivities` (real = LLM I/O)
-│   ├── config.ts               #   loads .env/.env.local, zod-validates → typed AppConfig
-│   ├── connection.ts           #   NativeConnection (worker) + Client connection (api/cli)
+│   ├── config/                 #   AppConfig (grouped by concern) — index/load/read-env/types
+│   ├── temporal/               #   NativeConnection (worker) + Client connection (api/cli)
 │   ├── logger.ts               #   shared pino instance from AppConfig.logLevel
+│   ├── process-errors.ts       #   unhandledRejection/uncaughtException → log + exit
 │   └── worker.ts               #   Worker.create + run  ← workflows + activities execute HERE
 └── interfaces/                 # driving adapters (all depend only on application + infra client)
     ├── cli/
     │   └── client.ts           #   start-only: starts a workflow, prints its id, exits
     └── http/
-        ├── server.ts           #   Fastify bootstrap: pino, @fastify/cors, @fastify/helmet, Client
+        ├── app.ts              #   buildApp factory (helmet, cors, error handler, routes)
+        ├── server.ts           #   entrypoint: buildApp + config + connection + listen
+        ├── error-handler.ts    #   { error } envelope + status mapping
         ├── routes/agents.ts    #   /agents endpoints → start/query/signal via Temporal Client
-        └── schemas.ts          #   zod request/response schemas (reuse contracts where possible)
+        └── schemas.ts          #   zod request schemas (reuse contracts where possible)
 
 # Unit tests are COLOCATED next to their target (*.test.ts):
 #   src/infra/activities/ai-tools.test.ts · src/infra/config.test.ts
@@ -101,7 +104,7 @@ REST API** (`:3000`). All three are clients issuing the same signals/queries def
 
 ## Configuration
 
-Single typed config module (`src/infra/config.ts`) is the only reader of `process.env`;
+Single typed config module (`src/infra/config`) is the only reader of `process.env`;
 the rest of the code depends on a typed `AppConfig` (DIP + DRY).
 
 - **`.env`** — local base config (git-ignored). **`.env.local`** — machine/secret overrides
@@ -110,9 +113,10 @@ the rest of the code depends on a typed `AppConfig` (DIP + DRY).
 - **Precedence (highest → lowest):** real `process.env` → `.env.local` → `.env` →
   built-in defaults. The app runs with **no env files at all** thanks to the defaults.
 - Variables: `TEMPORAL_ADDRESS` (default `localhost:7233`), `TEMPORAL_NAMESPACE`
-  (`default`), `LOG_LEVEL` (`info`), `NODE_ENV` (`development`), `HTTP_PORT`
-  (`3000`), `HTTP_HOST` (`0.0.0.0`), `CORS_ORIGIN` (`*`), `TEMPORAL_API_KEY` (optional, Cloud).
-  The **task queue is not an env var** — it's the `TASK_QUEUE` contract constant.
+  (`default`), `TEMPORAL_TASK_QUEUE` (`ai-agent`), `LOG_LEVEL` (`info`), `NODE_ENV`
+  (`development`), `HTTP_PORT` (`3000`), `HTTP_HOST` (`0.0.0.0`), `CORS_ORIGIN` (`*`),
+  `TEMPORAL_API_KEY` (optional, Cloud). Flat env vars map to the grouped `AppConfig`
+  (`http.*`, `temporal.connection.*`, `temporal.taskQueue`).
 - Compose loads `.env`/`.env.local` into each app service via `env_file` (both optional), then
   overrides the network-specific vars in `environment:` (`TEMPORAL_ADDRESS=temporal:7233` — the
   service DNS, not localhost). `environment:` wins over `env_file`.
