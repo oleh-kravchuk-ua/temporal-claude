@@ -178,13 +178,14 @@ No dev server or worker needed.
 
 ## Scripts
 
-| script                                               | purpose                                          |
-| ---------------------------------------------------- | ------------------------------------------------ |
-| `worker` / `api` / `start`                           | run the worker / REST API / CLI client (via tsx) |
-| `build`                                              | strict typecheck (`tsc --noEmit`)                |
-| `lint` / `lint:fix`                                  | ESLint                                           |
-| `format` / `format:check`                            | Prettier                                         |
-| `test` / `test:unit` / `test:feature` / `test:watch` | Vitest                                           |
+| script                                               | purpose                                                                   |
+| ---------------------------------------------------- | ------------------------------------------------------------------------- |
+| `worker` / `api` / `start`                           | run the worker / REST API / CLI client (via tsx)                          |
+| `claude:check`                                       | check the Claude connection + latency benchmark (real API, `-- --runs N`) |
+| `build`                                              | strict typecheck (`tsc --noEmit`)                                         |
+| `lint` / `lint:fix`                                  | ESLint                                                                    |
+| `format` / `format:check`                            | Prettier                                                                  |
+| `test` / `test:unit` / `test:feature` / `test:watch` | Vitest                                                                    |
 
 ## Tooling
 

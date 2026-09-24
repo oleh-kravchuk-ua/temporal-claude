@@ -39,15 +39,16 @@ A thin Temporal-client adapter — validate input, call the Client, no business 
 
 ## Commands
 
-| command                           | purpose                                             |
-| --------------------------------- | --------------------------------------------------- |
-| `npm run worker`                  | run the worker (hosts workflows + activities)       |
-| `npm run api`                     | run the Fastify HITL REST API (`:3000`)             |
-| `npm run start`                   | CLI client — start one workflow, print its id, exit |
-| `npm run build`                   | strict typecheck (`tsc --noEmit`)                   |
-| `npm run lint` / `lint:fix`       | ESLint (check / auto-fix)                           |
-| `npm run format` / `format:check` | Prettier write / verify                             |
-| `npm test` / `npm run test:watch` | Vitest (single file: `npx vitest run <path>`)       |
+| command                           | purpose                                                                       |
+| --------------------------------- | ----------------------------------------------------------------------------- |
+| `npm run worker`                  | run the worker (hosts workflows + activities)                                 |
+| `npm run api`                     | run the Fastify HITL REST API (`:3000`)                                       |
+| `npm run start`                   | CLI client — start one workflow, print its id, exit                           |
+| `npm run claude:check`            | check the Claude connection + short latency benchmark (real API, costs cents) |
+| `npm run build`                   | strict typecheck (`tsc --noEmit`)                                             |
+| `npm run lint` / `lint:fix`       | ESLint (check / auto-fix)                                                     |
+| `npm run format` / `format:check` | Prettier write / verify                                                       |
+| `npm test` / `npm run test:watch` | Vitest (single file: `npx vitest run <path>`)                                 |
 
 Manual runs need a local cluster: `temporal server start-dev` (gRPC `:7233`, Web UI `:8233`). Full run + HITL instructions live in the **`temporal-agent-ops`** skill.
 

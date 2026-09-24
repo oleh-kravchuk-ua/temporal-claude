@@ -53,7 +53,7 @@ Format check: npm run format:check
 Unit tests:   npx vitest run src/activities/claude-ai-tools.test.ts
 All unit:     npm run test:unit
 Feature:      npm run test:feature
-Live smoke:   ANTHROPIC_API_KEY=... npx vitest run src/activities/claude-ai-tools.live.test.ts   # opt-in, skipped w/o key
+Live check:   npm run claude:check [-- --runs 3]   # manual: real API, needs ANTHROPIC_API_KEY (costs cents)
 Run (real):   AI_PROVIDER=claude ANTHROPIC_API_KEY=... npm run worker   # + npm run api / npm start
 ```
 
@@ -65,7 +65,6 @@ src/activities/
 ├── mock-ai-tools.ts            # unchanged
 ├── claude-ai-tools.ts          # NEW: createClaudeAiTools(logger, client, options) satisfies AiToolsActivities
 ├── claude-ai-tools.test.ts     # NEW: unit tests, fake client injected, no network
-├── claude-ai-tools.live.test.ts# NEW: opt-in live smoke (skipped without key)
 └── claude-prompts.ts           # NEW: prompt builders + Zod schema for plan output (pure, unit-testable)
 src/infra/config/               # + ai.{provider,model,apiKey?,maxRetries fixed 0}; .env.example gains ANTHROPIC_* / AI_PROVIDER
 CLAUDE.md                     # contract section updated to reference this strategy once implemented
@@ -115,9 +114,9 @@ stop reason, `max_tokens` truncation, Zod parse failure → `ApplicationFailure.
 | Unit (config)      | `AI_PROVIDER` default `mock`; `claude` w/o key → clear error; model override; key never appears in logged config                                                                                                                                  | none    |
 | Unit (selector)    | `createAiToolsActivities` returns mock vs claude per config                                                                                                                                                                                       | none    |
 | Feature (existing) | Unchanged; runs on the mock                                                                                                                                                                                                                       | none    |
-| Live smoke         | One `planTask` + one `synthesize` against the real API; skipped unless `ANTHROPIC_API_KEY` set; never in CI                                                                                                                                       | yes     |
+| Live check         | `npm run claude:check` (`src/cli/claude-check.ts`): a raw SDK call, then a short adapter benchmark; manual, never part of `npm test`                                                                                                              | yes     |
 
-Coverage expectation: the new files are fully covered by unit tests (respect `vitest.config.ts` excludes; the live test is excluded from `test`/`test:unit` default runs via the skip guard).
+Coverage expectation: the new files are fully covered by unit tests (respect `vitest.config.ts` excludes; the manual `claude:check` tool is excluded from coverage and never runs in `npm test`).
 
 ## Boundaries
 

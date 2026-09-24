@@ -21,7 +21,7 @@ flowchart TD
   T4 --> T5
   T5 --> T6[T6 runTool + synthesize]
   T6 --> T7
-  T7 --> T8[T8 Live smoke + manual HITL run]
+  T7 --> T8[T8 Live check + manual HITL run]
   T8 --> T9[T9 Docs]
 ```
 
@@ -42,12 +42,12 @@ T2 is independent of T1/T3/T4 and can run in parallel with them; everything else
 | Risk                                                                                                          | Impact | Mitigation                                                                                                                                                                         |
 | ------------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SDK structured-output API/shape differs from my assumption (`output_config.format`, Zod helper, Zod 4 compat) | High   | **T1 spike first**: install, read installed types/docs (context7), write findings into this plan before any adapter code. Fallback: hand-written JSON schema + `JSON.parse` + Zod. |
-| `claude-sonnet-5` rejects a param (sampling, thinking, effort placement) → 400 at runtime                     | Med    | T1 records exact accepted params; T8 live smoke catches any remainder. Unit tests assert the request has no `temperature`/`top_p`/`budget_tokens`.                                 |
+| `claude-sonnet-5` rejects a param (sampling, thinking, effort placement) → 400 at runtime                     | Med    | T1 records exact accepted params; `npm run claude:check` (T8) caught none: the shape was accepted. Unit tests assert the request has no `temperature`/`top_p`/`budget_tokens`.     |
 | Activity exceeds the 1-minute `startToCloseTimeout`                                                           | Med    | Small `max_tokens`, thinking off; measure in T8; the client timeout (limit − 15 s) turns a hung call into a retryable error.                                                       |
 | API key leaks via logs/errors/`.env`                                                                          | High   | Key only in `AppConfig.ai.apiKey`; never log config or SDK request options; test asserts key absent from thrown/logged values; `.env.local` already git-ignored.                   |
 | Prompt injection via topic/feedback/guidance                                                                  | Med    | Delimited-data prompt design; output is schema-validated and only ever rendered as text; no tool execution from model output.                                                      |
 | Model returns plan with bad tool names / 0 or 30 steps                                                        | Med    | Zod bounds → non-retryable failure (retrying an identical prompt rarely fixes it; workflow surfaces the error).                                                                    |
-| Cost surprises during demo                                                                                    | Low    | Small per-activity `max_tokens`; default provider `mock`; live test opt-in.                                                                                                        |
+| Cost surprises during demo                                                                                    | Low    | Small per-activity `max_tokens`; default provider `mock`; the live check is a manual command (`npm run claude:check`), never part of `npm test`.                                   |
 | `noUncheckedIndexedAccess` / `verbatimModuleSyntax` friction with SDK types                                   | Low    | Use `import type Anthropic`; narrow content blocks by `.type`.                                                                                                                     |
 
 ## Verification checkpoints
@@ -78,6 +78,20 @@ Verified against the installed types in `node_modules/@anthropic-ai/sdk` (not fr
 - **Client:** `new Anthropic({ apiKey, maxRetries: 0 })` (default is 2; timeout default 10 min, ms). `Model` type includes `'claude-sonnet-5'`.
 - **Errors** (`Anthropic.*`, all extend `APIError` with `.status`): retryable → `RateLimitError` (429), `InternalServerError` (any 5xx incl. 529 overloaded), `APIConnectionError`, `APIConnectionTimeoutError`; non-retryable → `BadRequestError` (400), `AuthenticationError` (401), `PermissionDeniedError` (403), `NotFoundError` (404), `UnprocessableEntityError` (422). `ConflictError` (409) is transient upstream — treat as retryable. Unknown errors: rethrow (Temporal retries, max 3).
 - **`stop_reason`:** `end_turn | max_tokens | stop_sequence | tool_use | pause_turn | refusal | model_context_window_exceeded`. Only `end_turn` (and `stop_sequence`) is usable; every other value → non-retryable failure. `refusal` carries `stop_details.category` (`cyber|bio|frontier_llm|reasoning_extraction|general_harms|null`) — log the category, never the prompt.
-- **`claude-sonnet-5` request params** (types show `temperature`/`thinking` exist, but per the Claude API reference the model rejects some): send **no** `temperature`/`top_p`/`budget_tokens`/prefill; **omitting `thinking` runs adaptive on this model**, so to keep thinking off the request sets `thinking: { type: 'disabled' }` explicitly (accepted on Sonnet 5); `output_config.effort` is one of `low|medium|high|xhigh|max`. These two points come from the API reference, not the types — **confirm in the T8 live smoke test.**
+- **`claude-sonnet-5` request params** (types show `temperature`/`thinking` exist, but per the Claude API reference the model rejects some): send **no** `temperature`/`top_p`/`budget_tokens`/prefill; **omitting `thinking` runs adaptive on this model**, so to keep thinking off the request sets `thinking: { type: 'disabled' }` explicitly (accepted on Sonnet 5); `output_config.effort` is one of `low|medium|high|xhigh|max`. These two points come from the API reference, not the types — **confirmed by the live check: `thinking: disabled` is accepted (see results below).**
 - **Cross-check (context7, `/anthropics/anthropic-sdk-typescript`):** confirms `zodOutputFormat` usage with `claude-sonnet-5`, the status→error-class mapping (`APIError.generate`), `maxRetries` default 2 / `timeout` in ms, and the `ThinkingConfigParam` / `OutputConfig.effort` types. It does not cover Sonnet 5's behaviour when `thinking` is omitted — still to confirm in T8.
 - **Timeout (added after review):** the SDK default request timeout is 10 minutes, and Temporal does not abort an in-flight request when the activity's `startToCloseTimeout` fires. An attempt is limited to **1 minute** (`ACTIVITY_START_TO_CLOSE_MS`, unchanged; a 5-minute limit was tried and reverted), and `createClaudeClient` sets `timeout` to that minus 15 s (45 s), so a hung call ends as a retryable `APIConnectionTimeoutError` before the attempt times out. T8's measurements will show whether 45 s is enough for a 4096-token synthesis; if not, raise the limit deliberately (workflow change) rather than the client alone.
+
+## Live latency results (`npm run claude:check`, 2026-09-24, `claude-sonnet-5`)
+
+Connection OK (1.3 s for a 4-token reply). The API accepted the request shape as built: `thinking: { type: 'disabled' }`, `output_config.effort: 'low'`, and structured output (`output_config.format`). That settles the open point about disabled thinking on Sonnet 5. Three runs of plan → first step → synthesize:
+
+| activity   | calls | min (ms) | median (ms) | max (ms) |
+| ---------- | ----- | -------- | ----------- | -------- |
+| planTask   | 3     | 3943     | 4105        | 5722     |
+| runTool    | 3     | 13536    | 15577       | 20605    |
+| synthesize | 3     | 11146    | 13778       | 14847    |
+
+- **Adapter-measured request time and wall time differ by ≤ 1 ms**, so validation adds no measurable overhead.
+- **Slowest call: 20.6 s, i.e. 34% of the 60 s activity limit and 46% of the 45 s client timeout.** Comfortable, but not huge. The time is output volume, not connection: `runTool` writes the longest text (up to 2048 tokens), which is why it is slower than planning.
+- If it ever needs to be faster or safer against the 45 s client timeout: ask for shorter step outputs in `STEP_SYSTEM` or lower `STEP_MAX_TOKENS`. No change made.
