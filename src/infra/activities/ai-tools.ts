@@ -37,11 +37,7 @@ export const createAiToolsActivities = (logger: Logger): AiToolsActivities => ({
 
     return Promise.resolve({
       topic: trimmedTopic,
-      steps: withFeedback.map((entry, index) => ({
-        id: index + 1,
-        description: entry.description,
-        tool: entry.tool,
-      })),
+      steps: withFeedback.map((entry, index) => ({ id: index + 1, ...entry })),
     });
   },
 
