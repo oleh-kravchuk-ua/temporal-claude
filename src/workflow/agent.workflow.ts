@@ -22,12 +22,13 @@ import {
   type AgentResult,
 } from './contracts';
 
+import { ACTIVITY_START_TO_CLOSE_MS } from './activity-timeout';
 import { AgentRun } from './agent-run';
 
 import type { AiToolsActivities } from './ports';
 
 const activities = proxyActivities<AiToolsActivities>({
-  startToCloseTimeout: '1 minute',
+  startToCloseTimeout: ACTIVITY_START_TO_CLOSE_MS,
   retry: { initialInterval: '1s', maximumAttempts: 3 },
 });
 
