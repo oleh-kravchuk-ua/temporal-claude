@@ -68,5 +68,5 @@ The `temporal@temporal-marketplace` plugin is enabled (`.claude/settings.json`),
 ## Repo tooling
 
 - **MCP servers** (`.mcp.json`): `context7` only.
-- **Slash commands** (`.claude/commands/`): `/verify` (fits), `/review` and `/test-coverage` (inherited from a prior demo — still worded for Express/Jest; adapt before relying on them).
+- **Slash commands** (`.claude/commands/`): `/verify` (test + lint status check), `/review` (stack-aware security/performance/determinism/test-gap review), `/test-coverage` (coverage analysis that respects `vitest.config.ts`'s intentional excludes) — all three written for this project's actual stack (Fastify + Temporal + Vitest), not inherited from elsewhere.
 - **Permissions/hooks** (`.claude/settings.json`, `settings.local.json`): npm scripts + read-only/commit git commands allowed; destructive commands denied. A `Stop` desktop-notification hook is set locally. No `PostToolUse` formatting hook — formatting is handled by the husky `pre-commit`.
