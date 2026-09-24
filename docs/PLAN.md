@@ -67,3 +67,16 @@ T2 is independent of T1/T3/T4 and can run in parallel with them; everything else
 
 Spec open questions resolved by their stated defaults (thinking off; timeout unchanged unless
 T8 demands; hard-coded per-activity token limits; no prompt caching). Say so if any should change.
+
+## SDK findings (T1) — `@anthropic-ai/sdk` 0.128.0
+
+Verified against the installed types in `node_modules/@anthropic-ai/sdk` (not from memory).
+
+- **Install:** pinned exactly (`0.128.0`) — `.npmrc` has `save-exact=true`, the repo policy for new deps.
+- **Structured output:** `output_config: { format: { type: 'json_schema', schema } }`. `zodOutputFormat(zodSchema)` from `@anthropic-ai/sdk/helpers/zod` builds it and imports `zod/v4`, compatible with our Zod 4. `messages.parse()` exists (returns `parsed_output | null`).
+- **Decision — `create` + own validation, not `parse`:** the helper's schema is _lossy_: `enum` becomes a plain `string` with a `{enum: [...]}` description hint and `maxItems` is folded into a description (only `minItems`/`required`/`additionalProperties: false` are real constraints). So `PlanOutputSchema.safeParse(JSON.parse(text))` in the adapter is what actually enforces tool names and the 1–8 bound. Bonus: the injected client only needs `messages.create`.
+- **Client:** `new Anthropic({ apiKey, maxRetries: 0 })` (default is 2; timeout default 10 min, ms). `Model` type includes `'claude-sonnet-5'`.
+- **Errors** (`Anthropic.*`, all extend `APIError` with `.status`): retryable → `RateLimitError` (429), `InternalServerError` (any 5xx incl. 529 overloaded), `APIConnectionError`, `APIConnectionTimeoutError`; non-retryable → `BadRequestError` (400), `AuthenticationError` (401), `PermissionDeniedError` (403), `NotFoundError` (404), `UnprocessableEntityError` (422). `ConflictError` (409) is transient upstream — treat as retryable. Unknown errors: rethrow (Temporal retries, max 3).
+- **`stop_reason`:** `end_turn | max_tokens | stop_sequence | tool_use | pause_turn | refusal | model_context_window_exceeded`. Only `end_turn` (and `stop_sequence`) is usable; every other value → non-retryable failure. `refusal` carries `stop_details.category` (`cyber|bio|frontier_llm|reasoning_extraction|general_harms|null`) — log the category, never the prompt.
+- **`claude-sonnet-5` request params** (types show `temperature`/`thinking` exist, but per the Claude API reference the model rejects some): send **no** `temperature`/`top_p`/`budget_tokens`/prefill; **omitting `thinking` runs adaptive on this model**, so to keep thinking off the request sets `thinking: { type: 'disabled' }` explicitly (accepted on Sonnet 5); `output_config.effort` is one of `low|medium|high|xhigh|max`. These two points come from the API reference, not the types — **confirm in the T8 live smoke test.**
+- **Cross-check (context7, `/anthropics/anthropic-sdk-typescript`):** confirms `zodOutputFormat` usage with `claude-sonnet-5`, the status→error-class mapping (`APIError.generate`), `maxRetries` default 2 / `timeout` in ms, and the `ThinkingConfigParam` / `OutputConfig.effort` types. It does not cover Sonnet 5's behaviour when `thinking` is omitted — still to confirm in T8.
