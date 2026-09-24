@@ -5,9 +5,10 @@ import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker, bundleWorkflowCode, type WorkflowBundle } from '@temporalio/worker';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import type { AgentState, Plan } from '../domain';
+import type { AgentState, Plan, PlanStep } from './types';
 import { agentWorkflow } from './agent.workflow';
-import { approvePlan, cancelAgent, getState } from './contracts';
+import { approvePlan, cancelAgent, getState, provideGuidance } from './contracts';
+import type { ApprovePlanInput } from './contracts';
 import type { AiToolsActivities } from './ports';
 
 const TASK_QUEUE = 'test';
@@ -132,6 +133,84 @@ describe('agentWorkflow', () => {
       await handle.signal(cancelAgent);
 
       expect((await handle.result()).status).toBe('cancelled');
+    });
+  });
+
+  it('ignores a malformed approvePlan payload (still accepts a later valid one)', async () => {
+    await withWorker(mockActivities(), async () => {
+      const handle = await startAgent();
+      await waitFor(handle, awaitingRevision(1));
+
+      await handle.signal(approvePlan, { approved: 'yes' } as unknown as ApprovePlanInput);
+      await handle.signal(approvePlan, { approved: true });
+
+      const result = await handle.result();
+      expect(result.status).toBe('completed');
+      expect(result.revision).toBe(1); // the malformed signal did not trigger a re-plan
+    });
+  });
+
+  it('ignores approvePlan signals received outside awaiting_approval', async () => {
+    let releaseStep1: () => void = () => {};
+    const step1Gate = new Promise<void>((resolve) => {
+      releaseStep1 = resolve;
+    });
+    const runTool = vi.fn(async (step: PlanStep) => {
+      if (step.id === 1) await step1Gate;
+      return { stepId: step.id, output: `out-${step.id}` };
+    });
+
+    await withWorker(mockActivities({ runTool }), async () => {
+      const handle = await startAgent();
+      await waitFor(handle, awaitingRevision(1));
+      await handle.signal(approvePlan, { approved: true });
+      await waitFor(handle, (s) => s.status === 'executing' && s.currentStepId === 1);
+
+      // a late signal while executing must be ignored, not restart/re-plan the run
+      await handle.signal(approvePlan, { approved: false, feedback: 'too late' });
+      releaseStep1();
+
+      const result = await handle.result();
+      expect(result.status).toBe('completed');
+      expect(result.revision).toBe(1);
+    });
+  });
+
+  it('ignores blank guidance', async () => {
+    await withWorker(mockActivities(), async () => {
+      const handle = await startAgent();
+      await waitFor(handle, awaitingRevision(1));
+
+      await handle.signal(provideGuidance, '   ');
+      await handle.signal(approvePlan, { approved: true });
+      await handle.result();
+
+      expect((await handle.query(getState)).guidance).toEqual([]);
+    });
+  });
+
+  it('cancel during execution stops before remaining steps run', async () => {
+    let releaseStep1: () => void = () => {};
+    const step1Gate = new Promise<void>((resolve) => {
+      releaseStep1 = resolve;
+    });
+    const runTool = vi.fn(async (step: PlanStep) => {
+      if (step.id === 1) await step1Gate;
+      return { stepId: step.id, output: `out-${step.id}` };
+    });
+
+    await withWorker(mockActivities({ runTool }), async () => {
+      const handle = await startAgent();
+      await waitFor(handle, awaitingRevision(1));
+      await handle.signal(approvePlan, { approved: true });
+      await waitFor(handle, (s) => s.status === 'executing' && s.currentStepId === 1);
+
+      await handle.signal(cancelAgent);
+      releaseStep1();
+
+      const result = await handle.result();
+      expect(result.status).toBe('cancelled');
+      expect(runTool).toHaveBeenCalledTimes(1); // step 2 never ran
     });
   });
 });

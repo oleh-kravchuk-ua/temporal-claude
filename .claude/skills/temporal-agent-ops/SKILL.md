@@ -92,8 +92,8 @@ curl -sX POST localhost:3000/agents/<id>/cancel         # → 202
 curl -s      localhost:3000/healthz                     # → 200 { data: { status: "ok" } }
 ```
 
-Signal/query names and payload shapes are defined in `src/application/contracts.ts`, and
-the REST surface in `src/interfaces/http` — keep this runbook in sync with those files.
+Signal/query names and payload shapes are defined in `src/workflow/contracts.ts`, and
+the REST surface in `src/http` — keep this runbook in sync with those files.
 
 ## Testing (three tiers — no external server/worker needed)
 
@@ -111,7 +111,7 @@ below, run against a live stack.
 
 ## Configuration
 
-All config flows through `src/infra/config.ts` (the only reader of `process.env`),
+All config flows through `src/infra/config/` (the only reader of `process.env`),
 zod-validated into a typed `AppConfig`.
 
 - `.env` — local base (git-ignored). `.env.local` — machine/secret overrides (git-ignored).

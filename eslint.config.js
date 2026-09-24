@@ -37,37 +37,18 @@ export default tseslint.config(
     },
   },
 
-  // Layer boundaries (DDD): dependencies point inward only.
+  // Layer boundaries: the workflow depends on the port (ports.ts), never on an adapter.
   {
-    files: ['src/domain/**/*.ts'],
+    files: ['src/workflow/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
             {
-              group: ['@temporalio/*'],
-              message: 'domain must stay framework-free (no Temporal imports).',
-            },
-            {
-              group: ['**/application/**', '**/infra/**', '**/interfaces/**'],
-              message: 'domain must not depend on outer layers.',
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    files: ['src/application/**/*.ts'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['**/infra/**', '**/interfaces/**'],
-              message: 'application depends on ports, not infra/interfaces adapters.',
+              group: ['**/infra/**', '**/activities/**', '**/http/**', '**/cli/**'],
+              message:
+                'workflow must not depend on adapters — depend on the port (AiToolsActivities) instead.',
             },
           ],
         },
@@ -78,7 +59,7 @@ export default tseslint.config(
   // Activities are async by contract (the port returns Promises), so a mock/adapter body
   // with no `await` is intentional — real implementations will await I/O (e.g. an LLM call).
   {
-    files: ['src/infra/activities/**/*.ts'],
+    files: ['src/activities/**/*.ts'],
     rules: {
       '@typescript-eslint/require-await': 'off',
     },

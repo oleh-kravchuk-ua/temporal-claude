@@ -10,24 +10,25 @@ A small application to test orchestration for running AI tools within [Temporal]
 
 The app is built and verified: worker, Fastify REST API, and CLI client all run; **22 tests
 pass** (unit + endpoint e2e), and the full stack runs under Docker Compose. `README.md` is the
-user-facing guide; `docs/{PLAN,SPEC,TASKS}.md` capture the design and (checked-off) build history
-and remain the reference for _why_ things are shaped this way.
+user-facing guide; `docs/{PLAN,SPEC}.md` capture the design and remain the reference for
+_why_ things are shaped this way.
 
 - **`docs/SPEC.md`** — the behavioral contract: domain model, workflow state machine,
   signal/query/activity/HTTP contracts, config/logging contracts, layer-boundary rules.
 - **`docs/PLAN.md`** — architecture, run model, toolchain, Docker decisions.
-- **`docs/TASKS.md`** — the phased build log (all phases checked off).
 
 ## Architecture (see `docs/PLAN.md`)
 
-Single package, **layered DDD**, dependencies point **inward only**:
+Single package, flat and Temporal-idiomatic — the workflow depends only on the `AiToolsActivities` port, never on an adapter:
 
 ```
 src/
-├── domain/         # the model: types/interfaces only (pure, framework-free) — NO @temporalio imports
-├── application/    # workflows + ports.ts (AiToolsActivities) + contracts/ (signals/queries) — MUST NOT import infra
-├── infra/          # config, logger (pino), Temporal connection, activity adapters, worker  ← workflows run in the worker
-└── interfaces/     # driving adapters: cli/ (start-only client) + http/ (Fastify HITL REST API)
+├── workflow/       # agentWorkflow + AgentRun + ports.ts (AiToolsActivities) + contracts.ts (signals/queries) + types.ts — MUST NOT import infra/activities/http/cli
+├── activities/     # AiToolsActivities strategies (mock today; Claude-backed later) + index.ts (the Strategy selector)
+├── infra/          # config, logger (pino), Temporal connection, process-error handlers
+├── worker.ts       # entrypoint: hosts the workflow + activities
+├── http/           # Fastify HITL REST API (a Temporal client)
+└── cli/            # start-only CLI client
 ```
 
 Key mental model: **the workflow runs inside the worker**, not a container of its own. The `temporal` server is the cluster; the CLI, the Fastify API, and the Web UI are all just _clients_ that start/signal/query workflows. Human-in-the-loop approval happens via Web UI (`:8233`), Temporal CLI, or the REST API (`:3000`) — there is no bespoke frontend.
@@ -55,7 +56,7 @@ Local Temporal cluster for manual runs: `temporal server start-dev` (gRPC `:7233
 - **Config** via `src/infra/config/` only (the single reader of `process.env`): `.env` + `.env.local` (both git-ignored) + committed `.env.example`; runs with no env files thanks to defaults. `AppConfig` is grouped by concern (`http.*`, `temporal.connection.*`, `temporal.taskQueue`); flat env vars map onto it.
 - **Process safety:** long-lived entrypoints (worker, API) install `unhandledRejection` / `uncaughtException` handlers (`src/infra/process-errors.ts`) that log and exit non-zero so the supervisor restarts a clean process.
 - **Logging** via **pino** (shared `loggerOptions`): the worker uses `createLogger`, the API uses Fastify + per-request `request.log`, and activities receive an **injected** logger (`createAiToolsActivities(logger)`) — not `@temporalio/activity`'s `log` (throws outside a context, breaks unit tests). The **workflow** (`AgentRun`) logs only through `@temporalio/workflow`'s `log` (message-first, sinks), never pino (determinism).
-- **Boundary rules** (also intended as ESLint `no-restricted-imports`): `application` ↛ `infra`; `domain` imports no framework; `contracts/` is the sole owner of signal/query names; activity adapters `satisfies AiToolsActivities`.
+- **Boundary rules** (enforced by ESLint `no-restricted-imports`): `workflow` must not import `infra`/`activities`/`http`/`cli` — it depends on the port (`workflow/ports.ts`), not an adapter; `workflow/contracts.ts` is the sole owner of signal/query names; activity implementations `satisfies AiToolsActivities`.
 - **Testing (three tiers):** _smoke_ = manual `curl` checklist (not automated); _unit_ = colocated `*.test.ts` beside the source, collaborators mocked (Vitest + `@temporalio/testing` time-skipping for the workflow); _feature/e2e_ = `features/` at repo root, everything wired for real. Scripts: `test` (all), `test:unit` (`vitest run src`), `test:feature` (`vitest run features`). All automated tiers are self-contained (own test server) — no external cluster/worker needed. Prefer running a single test file while iterating.
 - **All `@temporalio/*` packages must share one identical version.**
 - **Git:** Conventional Commits (commitlint via husky `commit-msg`); husky `pre-commit` runs `format:check` + `lint` + `build`.

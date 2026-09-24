@@ -4,10 +4,10 @@
  * Thin adapter — all logic lives in the workflow/activities. Run: `npm run api`.
  */
 
-import { loadConfig } from '../../infra/config';
-import { loggerOptions } from '../../infra/logger';
-import { installProcessErrorHandlers } from '../../infra/process-errors';
-import { createClient } from '../../infra/temporal';
+import { loadConfig } from '../infra/config';
+import { loggerOptions } from '../infra/logger';
+import { installProcessErrorHandlers } from '../infra/process-errors';
+import { createClient } from '../infra/temporal';
 import { buildApp } from './app';
 
 const start = async (): Promise<void> => {

@@ -8,7 +8,7 @@
 import { Client, Connection, type ConnectionOptions } from '@temporalio/client';
 import { NativeConnection, type NativeConnectionOptions } from '@temporalio/worker';
 
-import type { AppConfig } from '../config';
+import type { AppConfig } from './config';
 
 const connectionOptions = (config: AppConfig): ConnectionOptions & NativeConnectionOptions =>
   config.temporal.connection.apiKey === undefined

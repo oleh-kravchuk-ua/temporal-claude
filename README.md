@@ -23,21 +23,25 @@ stateDiagram-v2
 
 ## Architecture
 
-Layered / DDD — dependencies point **inward only** (`domain` is framework-free):
+Flat, Temporal-idiomatic layout — the workflow depends only on the `AiToolsActivities` port,
+never on an adapter:
 
 ```
 src/
-├── domain/         # the model: types only (Plan, StepResult, AgentState, …)
-├── application/    # orchestration: agentWorkflow + AgentRun + contracts/ (signals/queries) + ports.ts
-├── infra/          # config, logger (pino), temporal connection, mocked AI activities, worker
-└── interfaces/     # driving adapters: cli/ (start-only client) + http/ (Fastify REST API)
+├── workflow/       # agentWorkflow + AgentRun + contracts (signals/queries) + ports.ts + types.ts
+├── activities/      # AiToolsActivities strategies (mock today; Claude-backed later) + the selector
+├── infra/           # config, logger (pino), temporal connection, process-error handlers
+├── worker.ts         # entrypoint: hosts the workflow + activities
+├── http/             # Fastify REST API (a Temporal client)
+└── cli/               # start-only CLI client
 ```
 
 Key idea: **the workflow runs inside the worker**, not a container of its own. The `temporal`
 server is the cluster (orchestration + durable history + Web UI). The CLI, the REST API, and
 the Web UI are all just _clients_ that start/signal/query workflows. The workflow depends on
-the `AiToolsActivities` **port**; the mocked implementation lives in `infra/activities` — swap
-it for a real LLM call without touching the workflow.
+the `AiToolsActivities` **port** (`workflow/ports.ts`); concrete implementations live in
+`activities/`, selected by `activities/index.ts` — today that's just the mock, swapping in a
+real LLM call later won't touch the workflow.
 
 ```mermaid
 flowchart LR
@@ -171,4 +175,4 @@ Strict TypeScript (`@tsconfig/strictest`), ESLint (type-aware + enforced layer b
 Prettier, Vitest, zod (edge validation), pino (logging), Fastify (API), husky + commitlint
 (Conventional Commits). The long-lived processes (worker, API) install
 `unhandledRejection`/`uncaughtException` handlers that log and exit non-zero so a supervisor
-restarts them cleanly. See `docs/{PLAN,SPEC,TASKS}.md` for the design and build history.
+restarts them cleanly. See `docs/{PLAN,SPEC}.md` for the design and the behavioral contract.
