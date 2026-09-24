@@ -82,6 +82,9 @@ docker compose run --rm client       # start one workflow, print its id, then ex
 ```
 
 - Web UI: <http://localhost:8233> · REST API: <http://localhost:3000>
+- `worker`, `api` and `client` are one image with different commands; `client` is one-shot
+  (`profiles: [tools]`). Compose reads `.env`/`.env.local` and points `TEMPORAL_ADDRESS` at
+  the `temporal` service.
 
 ## Run it — bare metal
 
@@ -115,6 +118,20 @@ curl -sX POST localhost:3000/agents/<id>/guidance -H 'content-type: application/
      -d '{"guidance":"prefer recent sources"}'    # → 202
 curl -sX POST localhost:3000/agents/<id>/cancel   # → 202
 ```
+
+Endpoints (success `{ "data": … }`, error `{ "error": { "code", "message" } }`):
+
+| Method & path               | Body                                       | Response               |
+| --------------------------- | ------------------------------------------ | ---------------------- |
+| `POST /agents`              | `{ topic: string }`                        | `201 { workflowId }`   |
+| `GET /agents/:id`           | —                                          | `200 AgentState`       |
+| `POST /agents/:id/approve`  | `{ approved: boolean, feedback?: string }` | `202`                  |
+| `POST /agents/:id/guidance` | `{ guidance: string }`                     | `202`                  |
+| `POST /agents/:id/cancel`   | —                                          | `202`                  |
+| `GET /healthz`              | —                                          | `200 { status: "ok" }` |
+
+Invalid body → `400 VALIDATION_ERROR`; unknown workflow id → `404 NOT_FOUND`. Signals are
+fire-and-forget, hence `202`.
 
 **Temporal CLI**
 
@@ -175,4 +192,4 @@ Strict TypeScript (`@tsconfig/strictest`), ESLint (type-aware + enforced layer b
 Prettier, Vitest, zod (edge validation), pino (logging), Fastify (API), husky + commitlint
 (Conventional Commits). The long-lived processes (worker, API) install
 `unhandledRejection`/`uncaughtException` handlers that log and exit non-zero so a supervisor
-restarts them cleanly. See `docs/{PLAN,SPEC}.md` for the design and the behavioral contract.
+restarts them cleanly. Design rules and the behavioral contract live in `CLAUDE.md`.
