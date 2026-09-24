@@ -43,7 +43,7 @@ export const toActivityFailure = (error: unknown): unknown =>
 
 type UsableResponse = Pick<Message, 'stop_reason' | 'content' | 'stop_details'>;
 
-const unusable = (message: string): ApplicationFailure =>
+export const unusableResponse = (message: string): ApplicationFailure =>
   ApplicationFailure.nonRetryable(message, RESPONSE_UNUSABLE);
 
 /**
@@ -55,11 +55,11 @@ export const assertUsable = (response: UsableResponse): string => {
 
   if (stopReason === 'refusal') {
     const category = response.stop_details?.category ?? 'unspecified';
-    throw unusable(`Claude declined the request (refusal, category: ${category})`);
+    throw unusableResponse(`Claude declined the request (refusal, category: ${category})`);
   }
 
   if (stopReason !== 'end_turn' && stopReason !== 'stop_sequence') {
-    throw unusable(`Claude response is not usable (stop_reason: ${String(stopReason)})`);
+    throw unusableResponse(`Claude response is not usable (stop_reason: ${String(stopReason)})`);
   }
 
   const text = response.content
@@ -67,7 +67,7 @@ export const assertUsable = (response: UsableResponse): string => {
     .join('');
 
   if (text.trim() === '') {
-    throw unusable('Claude response contained no text');
+    throw unusableResponse('Claude response contained no text');
   }
 
   return text;

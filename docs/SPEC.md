@@ -30,7 +30,7 @@ per-step outputs; the run completes with a synthesized answer. With the default
 2. The port `AiToolsActivities` and `workflow/types.ts` stay as-is. `ToolName` stays `search | summarize | draft`; for Claude these become _roles_ in the prompt, not real tools.
 3. **Temporal owns retries.** The SDK client is built with `maxRetries: 0`; retry policy stays in the workflow's `proxyActivities` (`maximumAttempts: 3`). Permanent failures (400/401/403/404, refusal, truncated/invalid output) are raised as non-retryable `ApplicationFailure`; 429/5xx/network/timeout stay retryable.
 4. Non-streaming calls with modest `max_tokens` (plan ≈ 2k, step ≈ 2k, synthesis ≈ 4k) — no call is long enough to need streaming.
-5. The workflow's `startToCloseTimeout: '1 minute'` is enough for Sonnet 5 at these sizes; if the live smoke test shows otherwise it is raised in the workflow (a workflow change, flagged in the plan).
+5. **Timeouts:** an activity attempt may run at most **1 minute** (`ACTIVITY_START_TO_CLOSE_MS` in `workflow/activity-timeout.ts`, used as the workflow's `startToCloseTimeout`). The Claude client's request timeout is derived from it (15 s shorter, 45 s), so a hung call ends as a retryable timeout before the attempt does.
 6. `planTask` returns **structured output** validated by Zod (`Plan`-shaped: 1–8 steps, `tool ∈ ToolName`); the workflow's existing "non-empty plan" contract is enforced at the adapter boundary. Ids are assigned by code (1-based), not trusted from the model.
 7. Model params for `claude-sonnet-5`: thinking explicitly disabled (`thinking: { type: 'disabled' }` — omitting it runs adaptive on this model; confirm in T8), `effort: 'low'` for `runTool`; **no** `temperature`/`top_p`/`budget_tokens`/prefill (rejected with 400 on this model).
 8. User-supplied text (topic, feedback, guidance) is **data, not instructions**: placed in the user turn inside delimited tags, never concatenated into the system prompt.
@@ -139,7 +139,7 @@ Coverage expectation: the new files are fully covered by unit tests (respect `vi
 ## Open Questions
 
 1. **Default thinking/effort for `planTask` and `synthesize`:** off (cheapest, my default) vs adaptive at `medium` for better plans?
-2. **Timeout headroom:** keep `startToCloseTimeout: '1 minute'` and only raise it if the smoke test demands it (my default), or raise proactively to 2 minutes now?
+2. ~~Timeout headroom~~ — decided: keep 1 minute per activity attempt (see Assumption 5).
 3. **Cost guard:** worth an optional `AI_MAX_OUTPUT_TOKENS`-style cap in config, or hard-code per-activity limits (my default)?
 4. **Prompt caching:** skip for now (prompts are small and short-lived) — agree?
 

@@ -38,19 +38,19 @@ Sizing: XS 1 file · S 1–2 · M 3–5. Global verify for every task: `npm run 
 
 ## Phase 2 — Adapter
 
-- [ ] **T5: `planTask` end-to-end (vertical slice)** (M)
+- [x] **T5: `planTask` end-to-end (vertical slice)** (M)
   - Acceptance: `createClaudeAiTools(logger, client, { model })` returns an object `satisfies AiToolsActivities`; `planTask` builds the request (model, `max_tokens` 2048, constant system, delimited user turn, structured-output format; **no** `temperature`/`top_p`/`budget_tokens`/prefill), validates via `PlanOutputSchema`, returns a `Plan` with ids `1..n`; failures go through `toActivityFailure`/`assertUsable`; debug log has topic but not prompt/completion above debug. `runTool`/`synthesize` present but not yet implemented is NOT allowed — stub them to throw `not implemented` only until T6 within the same branch.
   - Verify: `npx vitest run src/activities/claude-ai-tools.test.ts` (happy path, feedback reaches prompt, bad plan → non-retryable, refusal → non-retryable, 429 → retryable, request shape has no forbidden params).
   - Files: `src/activities/claude-ai-tools.ts`, `src/activities/claude-ai-tools.test.ts`
   - Depends: T3, T4
 
-- [ ] **T6: `runTool` + `synthesize`** (S)
+- [x] **T6: `runTool` + `synthesize`** (S)
   - Acceptance: `runTool(step, guidance)` returns `{ stepId, output }` with the tool as a role in the prompt and every guidance item included; `synthesize(topic, results)` returns non-empty text built from all step outputs in order; plain-text outputs (no structured format), `max_tokens` 2048/4096, same error handling; T5 stubs removed.
   - Verify: `npx vitest run src/activities/claude-ai-tools.test.ts` (per-activity happy path, guidance present, results ordered, empty text → non-retryable).
   - Files: `src/activities/claude-ai-tools.ts`, `src/activities/claude-prompts.ts`, `src/activities/claude-ai-tools.test.ts`
   - Depends: T5
 
-- [ ] **T7: Selector + worker wiring** (S)
+- [x] **T7: Selector + worker wiring** (S)
   - Acceptance: `createAiToolsActivities(logger, config.ai)` (signature change) returns the mock for `mock`, and for `claude` builds `new Anthropic({ apiKey, maxRetries: 0 })` and returns `createClaudeAiTools`; `worker.ts` passes `config.ai`; worker logs the chosen provider+model (not the key); the mock path never constructs the client; a test asserts `maxRetries: 0`.
   - Verify: `npx vitest run src/activities` + `npm test` (existing 22 still pass); manual: `AI_PROVIDER=claude npm run worker` with no key exits non-zero with the clear message.
   - Files: `src/activities/index.ts`, `src/activities/index.test.ts`, `src/worker.ts`
@@ -58,14 +58,14 @@ Sizing: XS 1 file · S 1–2 · M 3–5. Global verify for every task: `npm run 
 
 ### Checkpoint: Wired, offline
 
-- [ ] `npm test` all green (existing + new); `build`/`lint`/`format:check` clean
-- [ ] Default (`mock`) behavior proven unchanged; boundary lint rule still passes (`workflow/` has no new imports)
+- [x] `npm test` all green (115 tests); `build`/`lint`/`format:check` clean
+- [x] Default (`mock`) behavior proven unchanged (existing e2e feature test untouched and passing); boundary lint rule still passes (`workflow/` has no new imports); `AI_PROVIDER=claude` without a key exits at startup naming `ANTHROPIC_API_KEY`
 - [ ] **Review with human before Phase 3** (Phase 3 spends real API money)
 
 ## Phase 3 — Live verification
 
 - [ ] **T8: Live smoke test + manual HITL run** (S) — needs your `ANTHROPIC_API_KEY`
-  - Acceptance: `claude-ai-tools.live.test.ts` runs one `planTask` + one `synthesize` against the real API and is skipped (not failed) without a key; manual full run (start → approve → completed) recorded with workflow id, plan and final-answer excerpt; measured activity latency noted; if any activity nears the 1-minute timeout, propose (don't apply) a workflow change.
+  - Acceptance: `claude-ai-tools.live.test.ts` runs one `planTask` + one `synthesize` against the real API and is skipped (not failed) without a key; manual full run (start → approve → completed) recorded with workflow id, plan and final-answer excerpt; measured activity latency noted; report how much of the 1-minute activity timeout the slowest call used; if any call nears 45 s, propose (don't apply) a timeout change.
   - Verify: `ANTHROPIC_API_KEY=… npx vitest run src/activities/claude-ai-tools.live.test.ts`; `npm test` still offline-green with no key.
   - Files: `src/activities/claude-ai-tools.live.test.ts`, `docs/PLAN.md` (results note)
   - Depends: T7

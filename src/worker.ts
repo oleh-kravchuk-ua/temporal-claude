@@ -21,6 +21,8 @@ const run = async (): Promise<void> => {
 
   installProcessErrorHandlers(logger);
 
+  logger.info({ provider: config.ai.provider, model: config.ai.model }, 'AI provider selected');
+
   const connection = await createWorkerConnection(config);
 
   try {
@@ -30,7 +32,7 @@ const run = async (): Promise<void> => {
       taskQueue: config.temporal.taskQueue,
       // Temporal bundles the workflow file separately; point it at the module path.
       workflowsPath: fileURLToPath(new URL('./workflow/agent.workflow.ts', import.meta.url)),
-      activities: createAiToolsActivities(logger),
+      activities: createAiToolsActivities(logger, config.ai),
     });
 
     logger.info(
