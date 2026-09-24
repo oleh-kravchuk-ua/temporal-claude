@@ -6,25 +6,25 @@ Sizing: XS 1 file · S 1–2 · M 3–5. Global verify for every task: `npm run 
 
 ## Phase 1 — Foundation
 
-- [ ] **T1: SDK spike + add dependency** (S)
+- [x] **T1: SDK spike + add dependency** (S)
   - Acceptance: `@anthropic-ai/sdk` in `dependencies`; a "SDK findings" section appended to `docs/PLAN.md` records the exact: structured-output param/helper (and Zod 4 compatibility), accepted params for `claude-sonnet-5` (thinking/effort placement, no sampling params), error class names, `stop_reason` values to handle (`refusal`, `max_tokens`). Fallback approach chosen if the Zod helper doesn't fit.
   - Verify: `npm run build`; findings reviewed against installed `node_modules/@anthropic-ai/sdk` types / context7 (not memory).
   - Files: `package.json`, `package-lock.json`, `docs/PLAN.md`
   - Depends: none
 
-- [ ] **T2: Config `ai.*`** (S) — parallel with T1/T3/T4
+- [x] **T2: Config `ai.*`** (S) — parallel with T1/T3/T4
   - Acceptance: `AppConfig.ai = { provider: 'mock'|'claude' (default mock), model (default `claude-sonnet-5`), apiKey? }` from `AI_PROVIDER`/`ANTHROPIC_MODEL`/`ANTHROPIC_API_KEY`; `provider=claude` without key → `loadConfig` throws naming `ANTHROPIC_API_KEY` (never echoing a value); `.env.example` documents the three vars; no-env-file run still works.
   - Verify: `npx vitest run src/infra/config` (new cases: default, override, missing key, empty key, invalid provider).
   - Files: `src/infra/config/types.ts`, `src/infra/config/load.ts`, `src/infra/config/config.test.ts`, `.env.example`
   - Depends: none
 
-- [ ] **T3: Prompts + plan schema (pure)** (S)
+- [x] **T3: Prompts + plan schema (pure)** (S)
   - Acceptance: `claude-prompts.ts` exports builders for plan/step/synthesis prompts and `PlanOutputSchema` (1–8 steps, `tool ∈ ToolName`, non-empty description) plus `toPlan` assigning 1-based ids and trimming topic. `ToolName` tuple in the schema is compile-checked against `workflow/types.ts`. Topic/feedback/guidance appear only in the user turn inside delimiters; `system` text is constant.
   - Verify: `npx vitest run src/activities/claude-prompts.test.ts` (feedback included/omitted, guidance joined, injection-looking topic stays inside delimiters, schema rejects 0/9 steps and unknown tool).
   - Files: `src/activities/claude-prompts.ts`, `src/activities/claude-prompts.test.ts`
   - Depends: T1
 
-- [ ] **T4: Error classification (pure)** (S)
+- [x] **T4: Error classification (pure)** (S)
   - Acceptance: `toActivityFailure(error)` maps per spec: RateLimit/InternalServer/Connection/Timeout → returned unchanged (retryable); BadRequest/Authentication/PermissionDenied/NotFound → `ApplicationFailure.nonRetryable`; plus `assertUsable(response)` throwing non-retryable on `stop_reason` `refusal`/`max_tokens` or missing text block. Messages never include the API key.
   - Verify: `npx vitest run src/activities/claude-errors.test.ts` (table-driven over each error class and stop reason).
   - Files: `src/activities/claude-errors.ts`, `src/activities/claude-errors.test.ts`
@@ -32,8 +32,8 @@ Sizing: XS 1 file · S 1–2 · M 3–5. Global verify for every task: `npm run 
 
 ### Checkpoint: Foundation
 
-- [ ] `npm run build`, `lint`, `format:check`, `test:unit` green
-- [ ] Findings from T1 reviewed — plan still valid (adjust before T5 if not)
+- [x] `npm run build`, `lint`, `format:check`, `test` green (83 tests)
+- [x] Findings from T1 reviewed — plan still valid (adjustments: `create` + own Zod validation instead of `parse`; thinking explicitly disabled)
 - [ ] **Review with human before Phase 2**
 
 ## Phase 2 — Adapter

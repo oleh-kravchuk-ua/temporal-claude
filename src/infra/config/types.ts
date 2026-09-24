@@ -27,6 +27,18 @@ export const AppConfigSchema = z.object({
     }),
     taskQueue: z.string().min(1).default('ai-agent'),
   }),
+  ai: z
+    .object({
+      /** Which `AiToolsActivities` strategy the worker registers. */
+      provider: z.enum(['mock', 'claude']).default('mock'),
+      model: z.string().min(1).default('claude-sonnet-5'),
+      /** Only read when `provider` is `claude`; never logged. */
+      apiKey: z.string().min(1).optional(),
+    })
+    .refine((ai) => ai.provider !== 'claude' || ai.apiKey !== undefined, {
+      path: ['apiKey'],
+      error: 'ANTHROPIC_API_KEY is required when AI_PROVIDER=claude',
+    }),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

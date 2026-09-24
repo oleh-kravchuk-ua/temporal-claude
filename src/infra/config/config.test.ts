@@ -21,6 +21,10 @@ describe('loadConfig', () => {
       },
       corsOrigin: '*',
       logLevel: 'info',
+      ai: {
+        provider: 'mock',
+        model: 'claude-sonnet-5',
+      },
     };
 
     const config = loadConfig({});
@@ -64,5 +68,57 @@ describe('loadConfig', () => {
 
   it('returns a frozen config', () => {
     expect(Object.isFrozen(loadConfig({}))).toBe(true);
+  });
+});
+
+describe('loadConfig — ai', () => {
+  it('defaults to the mock provider with the default model and no key', () => {
+    const { ai } = loadConfig({});
+
+    expect(ai.provider).toBe('mock');
+    expect(ai.model).toBe('claude-sonnet-5');
+    expect(ai.apiKey).toBeUndefined();
+  });
+
+  it('reads provider, model and key from the environment', () => {
+    const { ai } = loadConfig({
+      AI_PROVIDER: 'claude',
+      ANTHROPIC_MODEL: 'claude-haiku-4-5',
+      ANTHROPIC_API_KEY: 'sk-test',
+    });
+
+    expect(ai).toEqual({ provider: 'claude', model: 'claude-haiku-4-5', apiKey: 'sk-test' });
+  });
+
+  it('fails fast when provider=claude has no key, naming the variable', () => {
+    expect(() => loadConfig({ AI_PROVIDER: 'claude' })).toThrow(/ANTHROPIC_API_KEY/);
+  });
+
+  it('treats a blank key as missing', () => {
+    expect(() => loadConfig({ AI_PROVIDER: 'claude', ANTHROPIC_API_KEY: '' })).toThrow(
+      /ANTHROPIC_API_KEY/,
+    );
+  });
+
+  it('ignores a blank key when the provider is mock (e.g. an empty .env placeholder)', () => {
+    expect(loadConfig({ ANTHROPIC_API_KEY: '' }).ai.apiKey).toBeUndefined();
+  });
+
+  it('rejects an unknown provider', () => {
+    expect(() => loadConfig({ AI_PROVIDER: 'openai' })).toThrow(/AI_PROVIDER|ai\.provider/);
+  });
+
+  it('never echoes the key in the error message', () => {
+    const secret = 'sk-secret-should-not-leak';
+    let message = '';
+
+    try {
+      loadConfig({ AI_PROVIDER: 'bogus', ANTHROPIC_API_KEY: secret });
+    } catch (error) {
+      message = error instanceof Error ? error.message : '';
+    }
+
+    expect(message).toMatch(/ai\.provider/);
+    expect(message).not.toContain(secret);
   });
 });

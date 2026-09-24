@@ -32,7 +32,7 @@ per-step outputs; the run completes with a synthesized answer. With the default
 4. Non-streaming calls with modest `max_tokens` (plan ≈ 2k, step ≈ 2k, synthesis ≈ 4k) — no call is long enough to need streaming.
 5. The workflow's `startToCloseTimeout: '1 minute'` is enough for Sonnet 5 at these sizes; if the live smoke test shows otherwise it is raised in the workflow (a workflow change, flagged in the plan).
 6. `planTask` returns **structured output** validated by Zod (`Plan`-shaped: 1–8 steps, `tool ∈ ToolName`); the workflow's existing "non-empty plan" contract is enforced at the adapter boundary. Ids are assigned by code (1-based), not trusted from the model.
-7. Model params for `claude-sonnet-5`: adaptive thinking allowed but not required (thinking off/omitted, `effort: 'low'` for `runTool`); **no** `temperature`/`top_p`/`budget_tokens`/prefill (rejected with 400 on this model).
+7. Model params for `claude-sonnet-5`: thinking explicitly disabled (`thinking: { type: 'disabled' }` — omitting it runs adaptive on this model; confirm in T8), `effort: 'low'` for `runTool`; **no** `temperature`/`top_p`/`budget_tokens`/prefill (rejected with 400 on this model).
 8. User-supplied text (topic, feedback, guidance) is **data, not instructions**: placed in the user turn inside delimited tags, never concatenated into the system prompt.
 9. Guidance/feedback semantics carry over from the mock: `feedback` triggers a re-plan that addresses it; `guidance[]` is applied to every subsequent `runTool` call.
 

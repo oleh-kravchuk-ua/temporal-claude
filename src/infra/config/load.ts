@@ -24,6 +24,12 @@ export const loadConfig = (env: RawEnv = readEnv()): AppConfig => {
       },
       taskQueue: env['TEMPORAL_TASK_QUEUE'],
     },
+    ai: {
+      provider: env['AI_PROVIDER'],
+      model: env['ANTHROPIC_MODEL'],
+      // A blank value (e.g. an empty `.env` placeholder) means "not set".
+      apiKey: env['ANTHROPIC_API_KEY'] || undefined,
+    },
   });
 
   if (!result.success) {
