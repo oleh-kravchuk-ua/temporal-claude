@@ -8,11 +8,20 @@
 `agentWorkflow` orchestrates a mocked "AI agent" that completes a research-style task in
 four phases, pausing for a human between planning and execution:
 
-```
-plan ──▶ AWAIT human approval ──▶ execute steps ──▶ synthesize ──▶ done
-             │  (reject → re-plan loop)
-             └──────────────────────┐
-   cancel signal ends the run from any waiting/executing point
+```mermaid
+stateDiagram-v2
+    [*] --> planning
+    planning --> awaiting_approval
+    awaiting_approval --> planning: reject + feedback (< 3×)
+    awaiting_approval --> rejected: reject (3rd time)
+    awaiting_approval --> executing: approve
+    executing --> synthesizing
+    synthesizing --> completed
+    awaiting_approval --> cancelled: cancel
+    executing --> cancelled: cancel
+    completed --> [*]
+    rejected --> [*]
+    cancelled --> [*]
 ```
 
 All reasoning is **mocked** and lives in the activity implementation

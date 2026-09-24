@@ -33,7 +33,7 @@ frontend.
 | Logging       | **pino** (structured). Fastify uses it natively; worker/activities/CLI use a shared pino instance. Workflows log via `@temporalio/workflow` `log` (sinks), never pino directly |
 | HTTP client   | Node built-in **`undici`** (global `fetch`) — no dependency; available to activities if a tool ever makes a real call                                                          |
 | Git hooks     | **husky** — `commit-msg` → **commitlint** (`@commitlint/config-conventional`); `pre-commit` → `lint` + `build` (typecheck)                                                     |
-| Principles    | Clean / **SOLID** / **DDD** / **DRY** / **KISS** — see [`SPEC.md` §Principles](./SPEC.md) for the concrete rules                                                               |
+| Principles    | Clean / **SOLID** / **DRY** / **KISS** — see [`SPEC.md` §Principles](./SPEC.md) for the concrete rules                                                                         |
 
 ## Architecture (flat, Temporal-idiomatic)
 
