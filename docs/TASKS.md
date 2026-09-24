@@ -64,10 +64,11 @@ Sizing: XS 1 file · S 1–2 · M 3–5. Global verify for every task: `npm run 
 
 ## Phase 3 — Live verification
 
-- [ ] **T8: Live smoke test + manual HITL run** (S) — needs your `ANTHROPIC_API_KEY`
-  - Acceptance: `claude-ai-tools.live.test.ts` runs one `planTask` + one `synthesize` against the real API and is skipped (not failed) without a key; manual full run (start → approve → completed) recorded with workflow id, plan and final-answer excerpt; measured activity latency noted; report how much of the 1-minute activity timeout the slowest call used; if any call nears 45 s, propose (don't apply) a timeout change.
-  - Verify: `ANTHROPIC_API_KEY=… npx vitest run src/activities/claude-ai-tools.live.test.ts`; `npm test` still offline-green with no key.
-  - Files: `src/activities/claude-ai-tools.live.test.ts`, `docs/PLAN.md` (results note)
+- [ ] **T8: Live check + manual HITL run** (S) — needs your `ANTHROPIC_API_KEY`
+  - Acceptance: `npm run claude:check` (a manual CLI, not a test) proves the connection and reports per-activity latency and how much of the 1-minute activity timeout the slowest call used; a full run (start → approve → completed) is recorded with workflow id, plan and final-answer excerpt; if any call nears 45 s, propose (don't apply) a timeout change.
+  - Verify: `npm run claude:check`; `npm test` makes no network calls.
+  - Files: `src/cli/claude-check.ts`, `src/cli/latency-stats.ts` (+ test), `package.json`, `vitest.config.ts`, `docs/PLAN.md` (results note)
+  - Status: latency and request-shape checks done manually via `npm run claude:check` (results in `docs/PLAN.md`); the full approve-and-complete HITL run is still to do.
   - Depends: T7
 
 ## Phase 4 — Docs & close-out

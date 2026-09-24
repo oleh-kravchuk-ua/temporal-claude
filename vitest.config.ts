@@ -24,6 +24,8 @@ export default defineConfig({
         'src/worker.ts',
         'src/http/server.ts',
         'src/cli/client.ts',
+        // Diagnostics tool that calls the real API — run manually (`npm run claude:check`).
+        'src/cli/claude-check.ts',
         // The workflow runs inside Temporal's own isolated V8 sandbox (for determinism), which
         // this process's coverage collector can't instrument — NOT a sign these are untested.
         // `agent-run.test.ts` covers the narrow slice reachable outside the sandbox (confirmed
