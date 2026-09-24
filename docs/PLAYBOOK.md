@@ -1,7 +1,7 @@
 # Playbook — run, play, and test
 
 Hands-on steps for driving the human-in-the-loop agent and running the test suite. See
-[`README.md`](../README.md) for the overview and [`SPEC.md`](./SPEC.md) for the contract.
+[`README.md`](../README.md) for the overview and [`CLAUDE.md`](../CLAUDE.md) for the contract.
 
 ```mermaid
 flowchart LR

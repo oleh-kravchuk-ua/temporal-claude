@@ -1,422 +1,148 @@
-# Specification — Temporal AI-Agent workflow
+# Spec: Claude-backed `AiToolsActivities`
 
-> The behavioral contract the implementation must satisfy. Detailed enough to build and
-> test against. Companion to [`PLAN.md`](./PLAN.md).
+> Status: **DRAFT — awaiting review (Phase 1: Specify).** No code until approved.
+> Extends the workflow behavior contract in `CLAUDE.md` (activity port & adapter). Behavior of the workflow is unchanged.
 
-## 1. Overview
+## Objective
 
-`agentWorkflow` orchestrates a mocked "AI agent" that completes a research-style task in
-four phases, pausing for a human between planning and execution:
+Add a second `AiToolsActivities` strategy, `createClaudeAiTools`, that calls Claude through
+`@anthropic-ai/sdk`, selectable next to the existing mock. The workflow, its signals/queries,
+the HTTP API and the CLI do not change — only the Strategy seam (`activities/index.ts`) and
+config grow. This is the payoff of the port design: the swap is invisible to the workflow.
 
-```mermaid
-stateDiagram-v2
-    [*] --> planning
-    planning --> awaiting_approval
-    awaiting_approval --> planning: reject + feedback (< 3×)
-    awaiting_approval --> rejected: reject (3rd time)
-    awaiting_approval --> executing: approve
-    executing --> synthesizing
-    synthesizing --> completed
-    awaiting_approval --> cancelled: cancel
-    executing --> cancelled: cancel
-    completed --> [*]
-    rejected --> [*]
-    cancelled --> [*]
+**User:** the developer running the HITL demo. **Success:** with `AI_PROVIDER=claude` and a
+valid key, `POST /agents` produces a real, topic-relevant plan; approving it executes real
+per-step outputs; the run completes with a synthesized answer. With the default
+(`AI_PROVIDER=mock`) nothing changes and everything works offline.
+
+### Decisions already made (from review)
+
+| Decision  | Choice                                                                                        |
+| --------- | --------------------------------------------------------------------------------------------- |
+| SDK       | `@anthropic-ai/sdk` Messages API (not the Agent SDK) — one call = one retryable activity      |
+| Scope     | All three activities call Claude; `runTool` is **LLM-simulated** (no real search/web backend) |
+| Selection | `AI_PROVIDER=mock\|claude`, default `mock`; `claude` without a key **fails fast at startup**  |
+| Model     | Default `claude-sonnet-5`, overridable via `ANTHROPIC_MODEL`                                  |
+
+## ASSUMPTIONS I'M MAKING
+
+1. Auth is `ANTHROPIC_API_KEY`, read **only** by `src/infra/config/` (the single `process.env` reader) and injected into the client — the SDK is never left to read env itself.
+2. The port `AiToolsActivities` and `workflow/types.ts` stay as-is. `ToolName` stays `search | summarize | draft`; for Claude these become _roles_ in the prompt, not real tools.
+3. **Temporal owns retries.** The SDK client is built with `maxRetries: 0`; retry policy stays in the workflow's `proxyActivities` (`maximumAttempts: 3`). Permanent failures (400/401/403/404, refusal, truncated/invalid output) are raised as non-retryable `ApplicationFailure`; 429/5xx/network/timeout stay retryable.
+4. Non-streaming calls with modest `max_tokens` (plan ≈ 2k, step ≈ 2k, synthesis ≈ 4k) — no call is long enough to need streaming.
+5. The workflow's `startToCloseTimeout: '1 minute'` is enough for Sonnet 5 at these sizes; if the live smoke test shows otherwise it is raised in the workflow (a workflow change, flagged in the plan).
+6. `planTask` returns **structured output** validated by Zod (`Plan`-shaped: 1–8 steps, `tool ∈ ToolName`); the workflow's existing "non-empty plan" contract is enforced at the adapter boundary. Ids are assigned by code (1-based), not trusted from the model.
+7. Model params for `claude-sonnet-5`: adaptive thinking allowed but not required (thinking off/omitted, `effort: 'low'` for `runTool`); **no** `temperature`/`top_p`/`budget_tokens`/prefill (rejected with 400 on this model).
+8. User-supplied text (topic, feedback, guidance) is **data, not instructions**: placed in the user turn inside delimited tags, never concatenated into the system prompt.
+9. Guidance/feedback semantics carry over from the mock: `feedback` triggers a re-plan that addresses it; `guidance[]` is applied to every subsequent `runTool` call.
+
+→ Correct me now or I'll proceed with these.
+
+## Tech Stack
+
+- Existing: Node ≥26, TypeScript strictest, Temporal SDK 1.24, Fastify, Zod 4, pino, Vitest.
+- **New dependency (approved):** `@anthropic-ai/sdk` (latest at implementation time; pin caret range like siblings).
+- No other new dependencies. Zod→JSON-schema for structured output uses whatever the SDK's helper provides; verified in Plan (Task 1) against the SDK docs via context7 / installed types before use.
+
+## Commands
+
+```
+Build:        npm run build
+Lint:         npm run lint
+Format check: npm run format:check
+Unit tests:   npx vitest run src/activities/claude-ai-tools.test.ts
+All unit:     npm run test:unit
+Feature:      npm run test:feature
+Live smoke:   ANTHROPIC_API_KEY=... npx vitest run src/activities/claude-ai-tools.live.test.ts   # opt-in, skipped w/o key
+Run (real):   AI_PROVIDER=claude ANTHROPIC_API_KEY=... npm run worker   # + npm run api / npm start
 ```
 
-All reasoning is **mocked** and lives in the activity implementation
-(`activities/mock-ai-tools.ts`) as pure, deterministic functions — that's where a real LLM
-call would go (I/O), so it's an adapter concern, not the workflow's model. The workflow
-contains only orchestration. `workflow/types.ts` holds the model (types/interfaces); the
-workflow's dependency contract is the `AiToolsActivities` port in `workflow/ports.ts`, and
-`activities/index.ts` is the Strategy seam that selects a concrete implementation.
+## Project Structure
 
-## 2. Domain model (`src/workflow/types.ts`)
-
-```ts
-export type ToolName = 'search' | 'summarize' | 'draft';
-
-export interface PlanStep {
-  id: number; // 1-based, stable within a plan
-  description: string;
-  tool: ToolName;
-}
-
-export interface Plan {
-  topic: string;
-  steps: PlanStep[]; // non-empty
-}
-
-export interface StepResult {
-  stepId: number;
-  output: string;
-}
-
-export type AgentStatus =
-  | 'planning'
-  | 'awaiting_approval'
-  | 'executing'
-  | 'synthesizing'
-  | 'completed'
-  | 'rejected' // terminal: too many rejections (see §6)
-  | 'cancelled'; // terminal: cancel signal received
-
-export interface AgentState {
-  status: AgentStatus;
-  topic: string;
-  revision: number; // increments each (re)plan; starts at 1
-  plan?: Plan; // set once planned
-  currentStepId?: number; // set during 'executing'
-  results: StepResult[];
-  guidance: string[]; // accumulated mid-run guidance
-  finalAnswer?: string; // set on 'completed'
-}
+```
+src/activities/
+├── index.ts                    # Strategy selector: switch on config.ai.provider (extended)
+├── mock-ai-tools.ts            # unchanged
+├── claude-ai-tools.ts          # NEW: createClaudeAiTools(logger, client, options) satisfies AiToolsActivities
+├── claude-ai-tools.test.ts     # NEW: unit tests, fake client injected, no network
+├── claude-ai-tools.live.test.ts# NEW: opt-in live smoke (skipped without key)
+└── claude-prompts.ts           # NEW: prompt builders + Zod schema for plan output (pure, unit-testable)
+src/infra/config/               # + ai.{provider,model,apiKey?,maxRetries fixed 0}; .env.example gains ANTHROPIC_* / AI_PROVIDER
+CLAUDE.md                     # contract section updated to reference this strategy once implemented
+README.md                       # "Running with real Claude" section
 ```
 
-The behavior (the mocked "AI") is NOT here — it lives in the activity implementation
-(`activities/mock-ai-tools.ts`, §5) as pure, deterministic functions:
+`worker.ts` keeps calling one factory. The client is constructed in `activities/index.ts`
+(or a tiny `claude-client.ts`) from `AppConfig`, and **injected** into `createClaudeAiTools`
+— mirroring how the logger is injected — so unit tests pass a fake and never touch the network.
+
+## Code Style
+
+Follows repo conventions: arrow functions, ES modules, `import type`, Zod at the edges,
+injected logger, `satisfies AiToolsActivities`.
 
 ```ts
-planTask(topic: string, feedback?: string): Promise<Plan>
-runTool(step: PlanStep, guidance: readonly string[]): Promise<StepResult>
-synthesize(topic: string, results: readonly StepResult[]): Promise<string>
-```
-
-Being pure, they are unit-testable with zero Temporal machinery
-(`activities/mock-ai-tools.test.ts`).
-
-## 3. Workflow I/O (`src/workflow/agent.workflow.ts`)
-
-```ts
-export interface AgentInput {
-  topic: string;
-}
-
-export interface AgentResult {
-  status: 'completed' | 'rejected' | 'cancelled';
-  finalAnswer?: string; // present iff status === 'completed'
-  revision: number;
-  stepCount: number;
-}
-
-export async function agentWorkflow(input: AgentInput): Promise<AgentResult>;
-```
-
-## 4. Contracts (`src/workflow/contracts.ts`)
-
-All signal/query definitions and payload schemas (agent input/result, approve-plan,
-provide-guidance, cancel, get-state) in one file. Shared by the workflow and any client (the
-CLI, the HTTP API). The task queue is **config** (`config.temporal.taskQueue`, env
-`TEMPORAL_TASK_QUEUE`), not a contract.
-
-```ts
-// Signals
-export const approvePlan = defineSignal<[ApprovePlanInput]>('approvePlan');
-export const provideGuidance = defineSignal<[string]>('provideGuidance');
-export const cancelAgent = defineSignal<[]>('cancel');
-
-// Query
-export const getState = defineQuery<AgentState>('getState');
-
-export interface ApprovePlanInput {
-  approved: boolean;
-  feedback?: string; // used when approved === false to steer re-planning
-}
-```
-
-### Signal semantics
-
-| Signal            | Payload                   | Effect                                                                                                                                                                 |
-| ----------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `approvePlan`     | `{ approved, feedback? }` | `approved: true` → proceed to execute. `approved: false` → re-plan with `feedback` (revision++), stay awaiting approval. Ignored unless status is `awaiting_approval`. |
-| `provideGuidance` | `string`                  | Append to `guidance`; applied to subsequent `runTool` calls. Accepted anytime before completion.                                                                       |
-| `cancel`          | —                         | Request graceful stop; workflow ends `cancelled` at the next safe point.                                                                                               |
-
-### Query semantics
-
-| Query      | Returns               | Rule                                                    |
-| ---------- | --------------------- | ------------------------------------------------------- |
-| `getState` | `AgentState` snapshot | **Read-only.** Must not mutate state or run activities. |
-
-## 5. Activity port & adapter
-
-**Port** (`src/workflow/ports.ts`) — the dependency the workflow declares, and the Strategy
-interface the `activities/` implementations are selected behind:
-
-```ts
-export interface AiToolsActivities {
-  planTask(topic: string, feedback?: string): Promise<Plan>;
-  runTool(step: PlanStep, guidance: string[]): Promise<StepResult>;
-  synthesize(topic: string, results: StepResult[]): Promise<string>;
-}
-```
-
-**Implementation** (`src/activities/mock-ai-tools.ts`) implements the port with the mocked,
-deterministic `planTask`/`runTool`/`synthesize` — the single place the fake "AI" lives, and
-where a real LLM call would go (e.g. a Claude-backed sibling implementation). Typed
-`satisfies AiToolsActivities` so the port and impl can't drift. `src/activities/index.ts` is
-the Strategy selection point `worker.ts` calls — today it only has the mock to choose from.
-
-**Proxy options** (in the workflow):
-
-```ts
-const acts = proxyActivities<AiToolsActivities>({
-  startToCloseTimeout: '1 minute',
-  retry: { initialInterval: '1s', maximumAttempts: 3 },
+export const createClaudeAiTools = (
+  logger: Logger,
+  client: Pick<Anthropic, 'messages'>,
+  { model }: { model: string },
+): AiToolsActivities => ({
+  planTask: async (topic, feedback) => {
+    logger.debug({ topic, hasFeedback: feedback !== undefined }, 'planTask');
+    const response = await client.messages.create({
+      model,
+      max_tokens: 2048,
+      system: PLANNER_SYSTEM,
+      messages: [{ role: 'user', content: buildPlanPrompt(topic, feedback) }],
+      output_config: { format: planOutputFormat },
+    });
+    return toPlan(topic, parseStructured(response, PlanOutputSchema)); // throws non-retryable on refusal/invalid
+  },
+  // runTool, synthesize: same shape, plain-text output
 });
 ```
 
-## 6. Workflow state machine
+Error mapping lives in one helper (`toActivityFailure`): `Anthropic.RateLimitError`,
+`InternalServerError`, `APIConnectionError`, `APIConnectionTimeoutError` → rethrow (retryable);
+`BadRequestError`, `AuthenticationError`, `PermissionDeniedError`, `NotFoundError`, refusal
+stop reason, `max_tokens` truncation, Zod parse failure → `ApplicationFailure.nonRetryable`.
 
-Initial: `{ status: 'planning', topic, revision: 1, results: [], guidance: [] }`.
+## Testing Strategy
 
-1. **planning** → `plan = await planTask(topic)` → set `plan`, `status = 'awaiting_approval'`.
-2. **awaiting_approval** → `await condition(() => approvalDecision !== undefined || cancelled)`.
-   - `cancel` → `status = 'cancelled'` → return.
-   - `approvePlan(false, feedback)` → `status = 'planning'`, `revision++`,
-     `plan = await planTask(topic, feedback)` → back to `awaiting_approval`.
-     After **MAX_REJECTIONS = 3** rejections → `status = 'rejected'` → return.
-   - `approvePlan(true)` → `status = 'executing'`.
-3. **executing** → for each `step` of `plan.steps` (in order):
-   - if `cancelled` → `status = 'cancelled'` → return.
-   - `currentStepId = step.id`; `result = await runTool(step, guidance)`; push to `results`.
-4. **synthesizing** → `finalAnswer = await synthesize(topic, results)`.
-5. **completed** → `status = 'completed'` → return
-   `{ status, finalAnswer, revision, stepCount: results.length }`.
+| Tier               | What                                                                                                                                                                                                                                              | Network |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Unit (colocated)   | Fake `client.messages.create` returning canned responses: happy path ×3 activities; feedback/guidance reach the prompt; malformed/empty plan → non-retryable; `refusal`/`max_tokens` → non-retryable; 429/5xx/connection → retryable; ids 1-based | none    |
+| Unit (config)      | `AI_PROVIDER` default `mock`; `claude` w/o key → clear error; model override; key never appears in logged config                                                                                                                                  | none    |
+| Unit (selector)    | `createAiToolsActivities` returns mock vs claude per config                                                                                                                                                                                       | none    |
+| Feature (existing) | Unchanged; runs on the mock                                                                                                                                                                                                                       | none    |
+| Live smoke         | One `planTask` + one `synthesize` against the real API; skipped unless `ANTHROPIC_API_KEY` set; never in CI                                                                                                                                       | yes     |
 
-Terminal states: `completed`, `rejected`, `cancelled`.
+Coverage expectation: the new files are fully covered by unit tests (respect `vitest.config.ts` excludes; the live test is excluded from `test`/`test:unit` default runs via the skip guard).
 
-## 6a. Configuration contract (`src/infra/config`)
+## Boundaries
 
-The **only** module that reads `process.env`. Loads `.env` then `.env.local` (local
-overrides base), then zod-validates into a typed, frozen `AppConfig`. Everything else
-depends on `AppConfig`, never on `process.env` (DIP + DRY).
+- **Always:** validate model output with Zod before returning it; keep `workflow/` free of `@anthropic-ai/sdk` and of `activities/` imports; inject client + logger; read env only in `infra/config`; run `build`/`lint`/`format:check`/unit tests before proposing a commit; keep mock as the default.
+- **Ask first:** changing the port (`workflow/ports.ts`) or `workflow/types.ts`; changing workflow timeouts/retry policy; adding any dependency beyond `@anthropic-ai/sdk`; adding real tools (web search) or streaming; enabling prompt caching / thinking; changing the default model.
+- **Never:** commit a key or `.env.local`; log the API key, or full prompts/completions above `debug`; call the API from `workflow/` code; let the SDK retry internally; trust model-supplied ids/tool names without validation; make unit/feature tests hit the network; push to master.
 
-```ts
-// schema is the single source of truth; the type is inferred from it. Grouped by concern.
-export const AppConfigSchema = z.object({
-  nodeEnv: z.enum(['development', 'test', 'production']).default('development'),
-  logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  http: z.object({
-    port: z.coerce.number().int().positive().default(3000),
-    host: z.string().min(1).default('0.0.0.0'),
-  }),
-  corsOrigin: z.string().min(1).default('*'),
-  temporal: z.object({
-    connection: z.object({
-      address: z.string().min(1).default('localhost:7233'),
-      namespace: z.string().min(1).default('default'),
-      apiKey: z.string().min(1).optional(), // set via .env.local for Cloud
-    }),
-    taskQueue: z.string().min(1).default('ai-agent'),
-  }),
-});
-export type AppConfig = z.infer<typeof AppConfigSchema>;
+## Success Criteria
 
-export const loadConfig = (env?: Record<string, string | undefined>): AppConfig; // throws on invalid env
-```
+1. `AI_PROVIDER` unset → behavior identical to today; all 22 existing tests pass untouched.
+2. `AI_PROVIDER=claude` without `ANTHROPIC_API_KEY` → worker exits non-zero at startup with a message naming the missing variable (no key echoed).
+3. `AI_PROVIDER=claude` + key: full HITL run (start → plan awaiting approval → approve → completed) yields a `finalAnswer` derived from real model output; manual verification recorded in the PR.
+4. A rejected-then-replanned run passes `feedback` to the model and the new plan reflects it (unit-asserted via prompt contents).
+5. Every plan returned satisfies: 1–8 steps, ids `1..n`, `tool ∈ ToolName`, non-empty descriptions — else non-retryable failure.
+6. Error classification table (above) verified by unit tests, including that the SDK client is constructed with `maxRetries: 0`.
+7. `npm run build`, `lint`, `format:check`, `test:unit`, `test:feature` all green; no network in any default test run.
+8. `workflow/` has no new imports (ESLint boundary rule still passes); `CLAUDE.md` (Workflow behavior contract) and `README.md` updated.
 
-**Env var mapping / precedence:** `NODE_ENV`, `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`,
-`TEMPORAL_API_KEY`, `TEMPORAL_TASK_QUEUE`, `HTTP_PORT`, `HTTP_HOST`, `CORS_ORIGIN`,
-`LOG_LEVEL` (flat env vars map to the grouped `AppConfig` above). Precedence highest→lowest:
-real `process.env` → `.env.local` → `.env` → schema defaults. Runs with no env files
-present. Loading uses Node's native `util.parseEnv` (no dotenv).
+## Open Questions
 
-## 6a-bis. Logging contract (`src/infra/logger.ts`)
+1. **Default thinking/effort for `planTask` and `synthesize`:** off (cheapest, my default) vs adaptive at `medium` for better plans?
+2. **Timeout headroom:** keep `startToCloseTimeout: '1 minute'` and only raise it if the smoke test demands it (my default), or raise proactively to 2 minutes now?
+3. **Cost guard:** worth an optional `AI_MAX_OUTPUT_TOKENS`-style cap in config, or hard-code per-activity limits (my default)?
+4. **Prompt caching:** skip for now (prompts are small and short-lived) — agree?
 
-**pino** is the logging seam — `loggerOptions(config)` derives options from `AppConfig`
-(shared so every process logs identically); level from `logLevel`.
+## Next phases (gated)
 
-- **Worker** builds a pino logger via `createLogger(config)`.
-- **Activities** receive the logger **by injection** — `createAiToolsActivities(logger)` —
-  rather than `@temporalio/activity`'s `log` (which throws outside an activity context), so
-  they log in production yet stay directly unit-testable. Logs include business context
-  (topic, stepId/tool).
-- **API** — Fastify is built with `loggerOptions(config)`. One access-log line per request
-  (`onResponse` hook: method/url/statusCode, `responseTimeMs` = total execution time, and a
-  memory snapshot `rssMB`/`heapUsedMB`; Fastify's default two-line logging is disabled). `reqId` comes from an inbound `x-request-id` header when present (else a uuid)
-  and tags both the access line and the handler's own `request.log` lines. Secrets are redacted
-  via pino `redact` (`authorization`, `cookie`, `apiKey`, `temporalApiKey`).
-- **Workflow** (`AgentRun`) must NOT use pino or any direct I/O — it logs phase transitions
-  via `import { log } from '@temporalio/workflow'` (message-first API, routed through sinks).
-  This preserves determinism (§7).
-- **Levels:** `info` for business milestones (run started/awaiting/approved/finished, handler
-  actions); `debug` for verbose per-step/per-activity detail (each `planTask`/`runTool`/
-  `synthesize`, "Executing step") — hidden at the default `info`, shown with `LOG_LEVEL=debug`.
-- `pino-pretty` is a dev-only transport for readable local output; JSON in production.
-
-## 6b. Contracts & layer boundaries (strict)
-
-Contracts are explicit at every seam; the workflow depends only on the port, never on an
-adapter (`http`/`cli`/`activities`/`infra` → `workflow`).
-
-| Seam            | Contract (owner)                                           | Consumers                           | Strictness                                        |
-| --------------- | ---------------------------------------------------------- | ----------------------------------- | ------------------------------------------------- |
-| Config          | `AppConfig` + `AppConfigSchema` (`infra/config`)           | worker, client, connection          | zod at load (runtime)                             |
-| Domain model    | types in `workflow/types.ts`                               | all layers                          | TS types + `strictest`                            |
-| Activity port   | `AiToolsActivities` (`workflow/ports.ts`)                  | workflow (proxy), activities (impl) | TS interface; impl must `satisfies` it            |
-| Workflow API    | `AgentInput`, `AgentResult` (`workflow/agent.workflow.ts`) | CLI, HTTP API, tests                | zod-validate `AgentInput` at workflow entry       |
-| Signals/queries | defs + payload types (`workflow/contracts.ts`)             | workflow, CLI, HTTP API, UI         | zod-validate payloads in handlers (external JSON) |
-| HTTP API        | REST endpoints (`http/`) — see §6d                         | external HTTP callers               | zod-validate request body/params; helmet + cors   |
-
-**Rules:**
-
-- `workflow` must **not** import `infra`/`activities`/`http`/`cli` (it proxies the _port_,
-  not an implementation).
-- `workflow/contracts.ts` is the **single source** of signal/query names and payload types
-  (DRY) — the client and the ops runbook reference it, never re-declare names.
-- Each `activities/` implementation is typed `satisfies AiToolsActivities` so the port and
-  impl can't drift.
-- External JSON (signal payloads, `AgentInput`) is **parsed with zod at the boundary**;
-  once past the boundary, code trusts the inferred types.
-
-## 6c. Principles → concrete rules
-
-Not slogans — each maps to something checkable in review:
-
-- **SRP (S):** one reason to change per module — `workflow` = orchestration + model,
-  `activities` = tool implementations, `infra` = cross-cutting plumbing (config/logger/
-  connection), `http`/`cli` = process entrypoints. No mixing.
-- **OCP (O):** new "tools" are added by extending `ToolName` + a branch in the active
-  activities implementation, without editing the workflow's control flow.
-- **LSP / ISP (L/I):** `AiToolsActivities` is the minimal port the workflow needs — no
-  extra methods; any implementation satisfying it is substitutable (real vs mocked), which
-  is exactly the Strategy pattern `activities/index.ts` selects between.
-- **DIP (D):** high-level policy (workflow) depends on the port abstraction; the concrete
-  implementation and config are injected at the edges (worker registration, `loadConfig`).
-- **DRY:** one config reader, one contracts module, types inferred from zod schemas (no
-  duplicated shape definitions).
-- **KISS:** single package, single task queue, in-memory only; **no** child workflows,
-  continue-as-new, DB, or abstraction we don't currently use.
-
-## 6d. HTTP API contract (`src/http`)
-
-A **Fastify** app that is a Temporal **Client** (not a worker — it hosts no workflow code).
-It maps REST calls onto the same signals/queries in `workflow/contracts.ts`. Thin adapter:
-no business logic, no state; every handler just validates input and calls the Temporal Client.
-
-**Cross-cutting:** `@fastify/helmet` (security headers) + `@fastify/cors` (origin from
-`AppConfig.corsOrigin`) registered globally; request/response logging via Fastify's pino.
-
-**Response envelope** (consistent): success → `{ data: <payload> }`; error →
-`{ error: { code, message, details? } }` with the matching HTTP status.
-
-| Method & path               | Body / params                              | Temporal action                     | Success                          | Errors               |
-| --------------------------- | ------------------------------------------ | ----------------------------------- | -------------------------------- | -------------------- |
-| `POST /agents`              | `{ topic: string (1..) }`                  | `client.start(agentWorkflow, …)`    | `201 { data: { workflowId } }`   | `400` invalid body   |
-| `GET /agents/:id`           | `id` param                                 | `handle.query(getState)`            | `200 { data: AgentState }`       | `404` unknown id     |
-| `POST /agents/:id/approve`  | `{ approved: boolean, feedback?: string }` | `handle.signal(approvePlan, …)`     | `202` (accepted)                 | `400` invalid, `404` |
-| `POST /agents/:id/guidance` | `{ guidance: string (1..) }`               | `handle.signal(provideGuidance, …)` | `202`                            | `400`, `404`         |
-| `POST /agents/:id/cancel`   | —                                          | `handle.signal(cancelAgent)`        | `202`                            | `404`                |
-| `GET /healthz`              | —                                          | — (liveness)                        | `200 { data: { status: 'ok' } }` | —                    |
-
-**Rules:**
-
-- Signals are fire-and-forget → `202 Accepted` (a signal cannot report workflow outcome).
-- Request schemas live in `http/schemas.ts` and **reuse** the payload schemas from
-  `workflow/contracts.ts` where they overlap (e.g. `ApprovePlanInput`) — DRY, no re-declaring.
-- Map Temporal errors to HTTP: workflow-not-found → `404`; validation → `400`; else `500`
-  with a generic message (no internal details leaked — see §7).
-- The API depends only on `workflow/contracts.ts` + `infra` (Client, config, logger); it
-  must not import `workflow` internals or the `activities` implementations.
-
-## 7. Determinism & correctness constraints
-
-- **No** `Date.now()` / `Math.random()` / I/O in workflow code — all non-determinism lives
-  in activities. (The SDK sandbox patches the first two, but we still avoid relying on them.)
-- Iterate `plan.steps` in stable order; step ids are stable within a revision.
-- Signal handlers are **non-async** (they only mutate local state); no activities/sleeps in
-  handlers or in the query handler or update validators.
-- Under `@tsconfig/strictest`, `noUncheckedIndexedAccess` makes indexed access `T |
-undefined` — guard array/index reads explicitly.
-- All `@temporalio/*` packages must share one identical version.
-- Zod validation is **synchronous** — safe inside signal/query handlers (no async, no
-  activities). Invalid signal payloads are validated then rejected/ignored with a logged
-  reason (a signal cannot fail the sender); malformed `AgentInput` throws at workflow entry.
-
-## 8. Run & interaction model
-
-- Cluster (`temporal`) → Worker (`worker`, hosts workflow+activities) → Client (starts).
-- After `start`, the workflow **blocks** at `awaiting_approval`. A human then:
-  - inspects the plan: `getState` query (Web UI or `temporal workflow query`), and
-  - approves/rejects: `approvePlan` signal (Web UI or `temporal workflow signal`).
-- The client process may exit immediately after starting; the workflow persists in the
-  cluster and continues on the worker regardless.
-
-## 9. Acceptance criteria
-
-- [ ] **Happy path:** start → approve → workflow completes with a non-empty `finalAnswer`
-      derived from all step results; `stepCount === plan.steps.length`.
-- [ ] **Reject → re-plan:** `approvePlan(false, feedback)` produces a new plan, increments
-      `revision`, and remains awaiting approval; feedback reaches `planTask`.
-- [ ] **Reject limit:** after `MAX_REJECTIONS` rejections the workflow ends `rejected`.
-- [ ] **Cancel while waiting:** `cancel` before approval ends the workflow `cancelled`.
-- [ ] **Cancel during execution:** `cancel` mid-execution ends `cancelled` without running
-      remaining steps.
-- [ ] **Query:** `getState` returns an accurate snapshot at each phase and never mutates
-      state.
-- [ ] **Guidance:** `provideGuidance` before/at execution is reflected in `runTool` output.
-- [ ] **Determinism:** workflow replays cleanly (no non-determinism errors) — verified by
-      the Vitest time-skipping environment.
-- [ ] **Config:** `loadConfig()` returns defaults with no env files; `.env.local` overrides
-      `.env`; invalid `LOG_LEVEL` throws a clear error.
-- [ ] **Boundary validation:** malformed `approvePlan` JSON is rejected (logged, state
-      unchanged); malformed `AgentInput` throws at workflow entry.
-- [ ] **Boundaries hold:** `workflow` does not import `infra`/`activities`/`http`/`cli`; the
-      HTTP API imports no `workflow` internals beyond `contracts.ts`/`agent.workflow.ts`.
-- [ ] **HTTP API:** `POST /agents` starts a run and returns `201 { data: { workflowId } }`;
-      `GET /agents/:id` returns the state; `POST .../approve` returns `202` and drives the
-      workflow to completion; invalid bodies → `400`; unknown id → `404`; `GET /healthz` →
-      `200`. Responses carry helmet security headers.
-- [ ] **Logging:** structured pino output at `LOG_LEVEL`; workflows log via SDK `log`, not
-      pino.
-- [ ] **Commits:** a non-conventional commit message is rejected by commitlint (commit-msg
-      hook); pre-commit runs lint + build.
-- [ ] **Quality gates:** `npm run build`, `npm run lint`, `npm run format:check`,
-      `npm test` all pass.
-
-## 10. Test plan (three tiers, Vitest)
-
-### Smoke — manual (`curl`, not automated)
-
-A documented checklist against a live stack (`temporal server start-dev` + `npm run worker`
-
-- `npm run api`): `POST /agents` → `GET /agents/:id` → `POST /agents/:id/approve` → confirm
-  `completed`. Lives in the `temporal-agent-ops` skill / README.
-
-### Unit — colocated (`*.test.ts` beside the source), collaborators mocked
-
-- `src/activities/mock-ai-tools.test.ts` — the mocked `planTask` / `runTool` / `synthesize`
-  implementation, incl. edge cases.
-- `src/infra/config/config.test.ts` — defaults with no env files; `.env.local` overrides
-  `.env`; invalid `LOG_LEVEL` throws.
-- `src/workflow/agent.workflow.test.ts` — `TestWorkflowEnvironment.createTimeSkipping()`
-  with **mocked activities** (the workflow's decision logic in isolation):
-  - Happy path — start, assert awaiting approval via `getState`, `approvePlan(true)`, await
-    result, assert `completed` + final answer + step count.
-  - Reject then approve — `approvePlan(false, 'more detail')`, assert revision bump &
-    feedback passed to mocked `planTask`, then approve and complete.
-  - Reject limit — reject `MAX_REJECTIONS` times → `rejected`.
-  - Cancel while awaiting approval → `cancelled`.
-  - Cancel during execution (mid-step, via a gated `runTool`) → `cancelled` without running
-    remaining steps.
-  - Malformed `approvePlan` payload → ignored; a later valid signal still completes normally
-    at the same revision.
-  - `approvePlan` received outside `awaiting_approval` (mid-execution, via a gated
-    `runTool`) → ignored, no re-plan.
-  - Blank `provideGuidance` payload → ignored (`state.guidance` stays empty).
-- `src/http/error-handler.test.ts` — the generic 500 fallback (`ZodError`/
-  `WorkflowNotFoundError` are exercised via the e2e test below): unexpected errors map to a
-  `500 { error: { code: 'INTERNAL' } }` envelope with no internal details leaked.
-
-The rest of the HTTP layer (`routes/agents.ts`) has **no separate unit route tests** — it's a
-thin adapter with no branching logic of its own, so it's covered end to end by the feature
-test below instead (real Fastify app, no mocked Client).
-
-### Feature / e2e — `features/` (repo root), everything real
-
-- `features/http-api.feature.test.ts` — **real Fastify app → real Temporal Client → real
-  worker → real activities**, on a time-skipping test server: `POST /agents` → `GET
-/agents/:id` → `POST /agents/:id/approve`, poll until `completed`; plus the `guidance` and
-  `cancel` signals, `400` (bad body), `404` (unknown workflow), and `/healthz`. Validates the
-  layers actually wire together (API → client → workflow → activities).
+Plan (`docs/PLAN.md`) → Tasks (`docs/TASKS.md`) → Implement (TDD, one task at a time, on a feature branch — never master; no commit without your approval).

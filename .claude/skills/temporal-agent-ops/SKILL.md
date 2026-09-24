@@ -12,8 +12,8 @@ workflow. This is the operational runbook for our project. For general Temporal 
 know-how (workflow authoring, determinism, versioning, CLI reference), defer to the
 `temporal:temporal-developer` plugin skill — this file does **not** duplicate it.
 
-See [`docs/SPEC.md`](../../../docs/SPEC.md) for the behavioral contract (signals, queries,
-state machine) and [`docs/PLAN.md`](../../../docs/PLAN.md) for architecture.
+See [`CLAUDE.md`](../../../CLAUDE.md) for the behavioral contract (signals, queries,
+state machine), architecture, and run model.
 
 ## Mental model (read this first)
 

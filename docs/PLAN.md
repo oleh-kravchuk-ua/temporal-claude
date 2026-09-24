@@ -1,196 +1,69 @@
-# Implementation Plan — Temporal AI-Agent demo
+# Implementation Plan: Claude-backed `AiToolsActivities`
 
-> Living document. We expect to adjust this as we build. See [`SPEC.md`](./SPEC.md) for
-> the behavioral contract.
+> Implements `docs/SPEC.md`. Status: **DRAFT — awaiting review (Phase 2: Plan).**
+> Task list with phases and checkboxes: `docs/TASKS.md`.
 
-## Goal
+## Overview
 
-A minimal, offline-runnable **human-in-the-loop AI agent** built on Temporal (TypeScript
-SDK). The agent plans a task, **waits for a human to approve the plan**, executes the
-approved steps, then synthesizes a final answer. All "AI" work is **mocked** — no API
-keys, no network — so the focus stays on Temporal orchestration and durable execution.
+Add `createClaudeAiTools` — a second implementation of the `AiToolsActivities` port using
+`@anthropic-ai/sdk` — plus config (`AI_PROVIDER`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`) and
+selection in `activities/index.ts`. The workflow, port, types, HTTP API and CLI are untouched.
+Default stays `mock`, so every existing test and the offline demo keep working.
 
-The human approves via Temporal's own **Web UI** and/or **CLI**; we do not build a
-frontend.
+## Dependency graph
 
-## Decisions (locked)
-
-| Area          | Decision                                                                                                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SDK           | Temporal **TypeScript** SDK (matches this ES-module repo)                                                                                                                      |
-| App shape     | Multi-step agent with **signals + queries** (human-in-the-loop)                                                                                                                |
-| AI backend    | **Mocked** (pure functions in `activities/`), offline                                                                                                                          |
-| Codebase      | **Single package**, flat Temporal-idiomatic layout, three entrypoints (worker, api, client)                                                                                    |
-| TypeScript    | `strict` via **`@tsconfig/strictest`**, `moduleResolution: Bundler`, ESNext                                                                                                    |
-| Lint          | **ESLint v9** flat config + `typescript-eslint` (type-aware)                                                                                                                   |
-| Format        | **Prettier** — sole formatter; `eslint-config-prettier` disables ESLint's formatting rules so the two don't fight                                                              |
-| Tests         | **Vitest** + `@temporalio/testing` (time-skipping, mocked activities)                                                                                                          |
-| Local cluster | **`temporal server start-dev`** (single dev-server, in-memory)                                                                                                                 |
-| Docker        | Compose: single **start-dev** container + our **worker** + one-shot **client**                                                                                                 |
-| Config        | **`.env` + `.env.local`** (both git-ignored) + committed `.env.example`; loaded once in a typed config module with built-in defaults                                           |
-| Validation    | **Zod at the edges** — env, workflow input, signal payloads, HTTP requests schema-validated; types inferred from schemas. Internal layer contracts stay plain TS interfaces    |
-| HTTP API      | **Fastify** driving adapter (a Temporal _client_) exposing a full HITL REST API; `@fastify/cors` + `@fastify/helmet`; zod request validation                                   |
-| Logging       | **pino** (structured). Fastify uses it natively; worker/activities/CLI use a shared pino instance. Workflows log via `@temporalio/workflow` `log` (sinks), never pino directly |
-| HTTP client   | Node built-in **`undici`** (global `fetch`) — no dependency; available to activities if a tool ever makes a real call                                                          |
-| Git hooks     | **husky** — `commit-msg` → **commitlint** (`@commitlint/config-conventional`); `pre-commit` → `lint` + `build` (typecheck)                                                     |
-| Principles    | Clean / **SOLID** / **DRY** / **KISS** — see [`SPEC.md` §Principles](./SPEC.md) for the concrete rules                                                                         |
-
-## Architecture (flat, Temporal-idiomatic)
-
-The workflow depends only on the `AiToolsActivities` port; everything else depends on the
-workflow's contracts/model, never the reverse.
-
-```
-src/
-├── workflow/                   # orchestration + model — MUST NOT import infra/activities/http/cli
-│   ├── types.ts                #   the model: types/interfaces only (no logic)
-│   ├── ports.ts                #   AiToolsActivities port (the workflow's dependency contract,
-│   │                           #     and the Strategy interface activities/ implementations satisfy)
-│   ├── contracts.ts            #   signals/queries + payload schemas: agent-input, agent-result,
-│   │                           #     approve-plan, provide-guidance, cancel, get-state
-│   ├── agent-run.ts            #   AgentRun — run state + phase pipeline (activities injected)
-│   └── agent.workflow.ts       #   agentWorkflow — wires signals/queries to AgentRun, proxies activities
-├── activities/                 # AiToolsActivities strategies (grows: mock today, Claude later)
-│   ├── mock-ai-tools.ts        #   mocked impl `satisfies AiToolsActivities` (real = LLM I/O)
-│   └── index.ts                #   Strategy selection point the worker calls
-├── infra/                      # cross-cutting plumbing only
-│   ├── config/                 #   AppConfig (grouped by concern) — index/load/read-env/types
-│   ├── temporal/                #   NativeConnection (worker) + Client connection (api/cli)
-│   ├── logger.ts               #   shared pino instance from AppConfig.logLevel
-│   └── process-errors.ts       #   unhandledRejection/uncaughtException → log + exit
-├── worker.ts                   #   entrypoint: Worker.create + run  ← workflows + activities execute HERE
-├── http/                       # driving adapter: Fastify REST API (a Temporal client)
-│   ├── app.ts                  #   buildApp factory (helmet, cors, error handler, routes)
-│   ├── server.ts               #   entrypoint: buildApp + config + connection + listen
-│   ├── error-handler.ts        #   { error } envelope + status mapping
-│   ├── routes/agents.ts        #   /agents endpoints → start/query/signal via Temporal Client
-│   └── schemas.ts              #   zod request schemas (reuse contracts where possible)
-└── cli/
-    └── client.ts               #   start-only: starts a workflow, prints its id, exits
-
-# Unit tests are COLOCATED next to their target (*.test.ts):
-#   src/activities/mock-ai-tools.test.ts · src/infra/config/config.test.ts
-#   src/workflow/agent.workflow.test.ts · src/http/routes/agents.test.ts
-
-features/                       # feature / e2e tests — everything wired for real
-└── http-api.feature.test.ts          # real Fastify app → real client → real worker
+```mermaid
+flowchart TD
+  T1[T1 SDK spike + dependency] --> T3[T3 Prompts + plan schema]
+  T1 --> T4[T4 Error classification]
+  T2[T2 Config: ai.*] --> T7[T7 Selector + worker wiring]
+  T3 --> T5[T5 planTask]
+  T4 --> T5
+  T5 --> T6[T6 runTool + synthesize]
+  T6 --> T7
+  T7 --> T8[T8 Live smoke + manual HITL run]
+  T8 --> T9[T9 Docs]
 ```
 
-## Testing strategy (three tiers)
+T2 is independent of T1/T3/T4 and can run in parallel with them; everything else is sequential.
 
-- **Smoke — manual `curl`.** Not automated; a documented checklist against a live stack
-  (`start-dev` + `worker` + `api`). See the `temporal-agent-ops` skill / README.
-- **Unit — colocated** (`*.test.ts` beside the source), collaborators **mocked**, fast and
-  isolated. Includes the workflow's state-machine test (`TestWorkflowEnvironment` + mocked
-  activities).
-- **Feature (e2e) — `features/`** at repo root, **everything real** (worker, activities,
-  Fastify app, client) driven through the user-facing entrypoints.
+## Architecture decisions
 
-**Ports & adapters:** the workflow calls `proxyActivities<AiToolsActivities>()` against the
-port defined in `workflow/ports.ts`, so `workflow` never imports `activities`/`infra`. The
-mocked implementation (`activities/mock-ai-tools.ts`) satisfies the port; today it's
-mocked/deterministic, tomorrow it's an LLM call — selected at `activities/index.ts` (the
-Strategy seam) without the workflow ever knowing which one it got. `workflow/types.ts` holds
-only the model (types) that every layer speaks.
+- **Client is injected, not imported in the adapter.** `createClaudeAiTools(logger, client, { model })` takes `Pick<Anthropic, 'messages'>`, so unit tests pass a fake. The real `new Anthropic({ apiKey, maxRetries: 0 })` is built only in the selector's `claude` branch — the mock path never constructs it.
+- **Temporal owns retries** (`maxRetries: 0`). Classification lives in one pure helper (`claude-errors.ts`) so the table in the spec is unit-testable in isolation.
+- **Prompts are pure functions** in `claude-prompts.ts` (topic/feedback/guidance in → messages out), separately testable from the SDK call. User text goes in the user turn inside delimited tags, never in `system`.
+- **Plan validation at the adapter edge** with Zod: 1–8 steps, `tool ∈ ToolName`, non-empty descriptions; ids assigned by code. Reuse the `ToolName` union from `workflow/types.ts` (a const tuple duplicated in the schema must be `satisfies`-checked against it so they can't drift).
+- **Fail-fast config:** the key requirement is a Zod `superRefine` on `AppConfig` (provider `claude` ⇒ key present), so the error surfaces in `loadConfig()` before the worker connects to Temporal.
+- **No workflow changes.** Timeout stays `1 minute` unless T8 shows it is too tight (then a separate, flagged change — Ask-first per spec).
+- **Vertical slicing:** T5 delivers a working `planTask` end-to-end (prompt → call → validate → error mapping) before `runTool`/`synthesize` reuse the same pattern in T6.
 
-**Where the workflow runs:** there is no "workflow container." Workflow code is hosted by
-the **worker**, which runs both workflow and activity functions. The `temporal` container
-is the cluster (orchestration + durable history + Web UI). Clients (the CLI, the **HTTP
-API**, the Web UI) only _start/poke_ workflows via a Temporal Client — they never host
-workflow code.
+## Risks and mitigations
 
-**Three ways to drive HITL:** Temporal Web UI (`:8233`), Temporal CLI, and our **Fastify
-REST API** (`:3000`). All three are clients issuing the same signals/queries defined in
-`workflow/contracts.ts`.
+| Risk                                                                                                          | Impact | Mitigation                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SDK structured-output API/shape differs from my assumption (`output_config.format`, Zod helper, Zod 4 compat) | High   | **T1 spike first**: install, read installed types/docs (context7), write findings into this plan before any adapter code. Fallback: hand-written JSON schema + `JSON.parse` + Zod. |
+| `claude-sonnet-5` rejects a param (sampling, thinking, effort placement) → 400 at runtime                     | Med    | T1 records exact accepted params; T8 live smoke catches any remainder. Unit tests assert the request has no `temperature`/`top_p`/`budget_tokens`.                                 |
+| Activity exceeds 1-minute `startToCloseTimeout`                                                               | Med    | Small `max_tokens`, thinking off; measure in T8; raise only with approval.                                                                                                         |
+| API key leaks via logs/errors/`.env`                                                                          | High   | Key only in `AppConfig.ai.apiKey`; never log config or SDK request options; test asserts key absent from thrown/logged values; `.env.local` already git-ignored.                   |
+| Prompt injection via topic/feedback/guidance                                                                  | Med    | Delimited-data prompt design; output is schema-validated and only ever rendered as text; no tool execution from model output.                                                      |
+| Model returns plan with bad tool names / 0 or 30 steps                                                        | Med    | Zod bounds → non-retryable failure (retrying an identical prompt rarely fixes it; workflow surfaces the error).                                                                    |
+| Cost surprises during demo                                                                                    | Low    | Small per-activity `max_tokens`; default provider `mock`; live test opt-in.                                                                                                        |
+| `noUncheckedIndexedAccess` / `verbatimModuleSyntax` friction with SDK types                                   | Low    | Use `import type Anthropic`; narrow content blocks by `.type`.                                                                                                                     |
 
-## Configuration
+## Verification checkpoints
 
-Single typed config module (`src/infra/config`) is the only reader of `process.env`;
-the rest of the code depends on a typed `AppConfig` (DIP + DRY).
+- **After T4 (foundations):** build/lint/format clean; new pure modules fully unit-tested; no adapter yet.
+- **After T7 (wired, offline):** `npm test` all green (existing 22 + new); default provider path proven unchanged; `AI_PROVIDER=claude` w/o key fails fast.
+- **After T8 (live):** real HITL run recorded (workflow id, plan, final answer excerpt) — evidence for Success Criterion 3.
+- **After T9 (done):** all 8 spec success criteria checked off.
 
-- **`.env`** — local base config (git-ignored). **`.env.local`** — machine/secret overrides
-  (git-ignored), e.g. Temporal Cloud address + API key. **`.env.example`** — committed
-  template documenting every variable.
-- **Precedence (highest → lowest):** real `process.env` → `.env.local` → `.env` →
-  built-in defaults. The app runs with **no env files at all** thanks to the defaults.
-- Variables: `TEMPORAL_ADDRESS` (default `localhost:7233`), `TEMPORAL_NAMESPACE`
-  (`default`), `TEMPORAL_TASK_QUEUE` (`ai-agent`), `LOG_LEVEL` (`info`), `NODE_ENV`
-  (`development`), `HTTP_PORT` (`3000`), `HTTP_HOST` (`0.0.0.0`), `CORS_ORIGIN` (`*`),
-  `TEMPORAL_API_KEY` (optional, Cloud). Flat env vars map to the grouped `AppConfig`
-  (`http.*`, `temporal.connection.*`, `temporal.taskQueue`).
-- Compose loads `.env`/`.env.local` into each app service via `env_file` (both optional), then
-  overrides the network-specific vars in `environment:` (`TEMPORAL_ADDRESS=temporal:7233` — the
-  service DNS, not localhost). `environment:` wins over `env_file`.
+## Process constraints (from project memory)
 
-## Run model
+- Work on a **feature branch** (e.g. `feat/claude-ai-tools`), never master; verify the branch before every commit.
+- **No commit/push without explicit approval**; Conventional Commits (commitlint); husky pre-commit runs `format:check` + `lint` + `build`.
+- **Do not start the next phase/task batch without confirmation** at each checkpoint.
 
-- **Bare metal:** `temporal server start-dev` → `npm run worker` → (`npm run api` and/or
-  `npm run start`) → approve via Web UI (`:8233`), CLI, or REST API (`:3000`).
-- **Docker:** `docker compose up` (temporal + worker + api) → start a run via
-  `POST :3000/agents`, `docker compose run --rm client`, or CLI → approve via UI/CLI/API.
+## Open questions
 
-Dev → Temporal Cloud is a config swap (env vars via `infra/temporal/index.ts`), not a code
-change.
-
-## Tooling / scripts
-
-| script         | command                  | purpose                                    |
-| -------------- | ------------------------ | ------------------------------------------ |
-| `worker`       | `tsx src/worker.ts`      | run the worker (long-lived)                |
-| `api`          | `tsx src/http/server.ts` | run the Fastify HITL REST API (long-lived) |
-| `start`        | `tsx src/cli/client.ts`  | start a workflow, print id, exit           |
-| `build`        | `tsc --noEmit`           | strict typecheck (run via tsx; no emit)    |
-| `lint`         | `eslint .`               | ESLint flat config                         |
-| `lint:fix`     | `eslint . --fix`         | lint and auto-fix                          |
-| `format`       | `prettier --write .`     | format the codebase                        |
-| `format:check` | `prettier --check .`     | verify formatting (CI / pre-commit)        |
-| `test`         | `vitest run`             | all tests (unit + feature)                 |
-| `test:unit`    | `vitest run src`         | colocated unit tests only                  |
-| `test:feature` | `vitest run features`    | feature / e2e tests only                   |
-| `test:watch`   | `vitest`                 | watch mode                                 |
-| `prepare`      | `husky`                  | install git hooks (runs on `npm install`)  |
-
-Runtime deps to add: `zod` (boundary validation), `fastify @fastify/cors @fastify/helmet
-pino` (API + logging). `undici` is **not** added — it's Node's built-in `fetch`. Dev deps
-to add: `typescript tsx @types/node vitest @temporalio/testing @tsconfig/strictest eslint
-@eslint/js typescript-eslint prettier eslint-config-prettier husky @commitlint/cli
-@commitlint/config-conventional pino-pretty` (runtime `@temporalio/*` already installed).
-
-## Files this adds (beyond `src/` + `features/`)
-
-`tsconfig.json` · `eslint.config.js` · `.prettierrc` · `.prettierignore` ·
-`vitest.config.ts` · `commitlint.config.js` · `.husky/commit-msg` · `.husky/pre-commit` ·
-`.env.example` · `Dockerfile` · `.dockerignore` · `docker-compose.yml`, plus updates to
-`package.json`, `README.md`, and `CLAUDE.md`.
-(`.env` / `.env.local` are local, git-ignored — created from `.env.example`.)
-
-## Docker Compose services
-
-One `Dockerfile` (multi-stage, `node:26-slim`); `worker`, `api`, and `client` are the
-**same image, different `command:`**.
-
-| service    | command                                  | kind                                    | ports      |
-| ---------- | ---------------------------------------- | --------------------------------------- | ---------- |
-| `temporal` | `temporal server start-dev --ip 0.0.0.0` | long-lived (cluster + UI)               | 7233, 8233 |
-| `worker`   | `worker`                                 | long-lived (hosts workflows+activities) | —          |
-| `api`      | `api`                                    | long-lived (Fastify REST)               | 3000       |
-| `client`   | `start`                                  | one-shot (`profiles: [tools]`)          | —          |
-
-`worker`/`api` `depends_on: temporal` (healthy). We do **not** build a frontend — the API
-is a programmatic interface; the human UI is Temporal's own Web UI.
-
-## Scope guardrails
-
-One workflow, three mocked activities, in-memory only, single task queue. **No** child
-workflows, continue-as-new, real LLM, database, or web frontend. The HTTP API is a thin
-Temporal-client adapter (start/query/signal) — no business logic lives in it.
-
-## Open questions / likely adjustments
-
-- Whether to demonstrate an activity **retry** (e.g., a mock transient failure) or keep
-  activities deterministic-happy for the first cut.
-- Whether the client stays strictly start-only or also prints a ready-to-paste
-  `temporal workflow signal` command for convenience.
-- Docker base image / `@temporalio/core-bridge` prebuild verification at build time.
-- Verify Node's `process.loadEnvFile` overwrite behavior on Node 26 and load order so the
-  documented precedence (real env → `.env.local` → `.env` → defaults) holds exactly.
+Spec open questions resolved by their stated defaults (thinking off; timeout unchanged unless
+T8 demands; hard-coded per-activity token limits; no prompt caching). Say so if any should change.
