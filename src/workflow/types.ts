@@ -1,6 +1,6 @@
 /**
- * Domain model: the agent's types and interfaces (the ubiquitous language). Declarations
- * only — no logic, no framework, no imports. This is the pure core every other layer speaks.
+ * The agent's model types. Declarations only — no logic, no imports — shared by the
+ * workflow, activities, and the HTTP/CLI adapters.
  */
 
 /** The mocked tools the agent can invoke for a plan step. */

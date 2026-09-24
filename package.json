@@ -17,9 +17,9 @@
     "node": ">=26"
   },
   "scripts": {
-    "worker": "tsx src/infra/worker.ts",
-    "api": "tsx src/interfaces/http/server.ts",
-    "start": "tsx src/interfaces/cli/client.ts",
+    "worker": "tsx src/worker.ts",
+    "api": "tsx src/http/server.ts",
+    "start": "tsx src/cli/client.ts",
     "build": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -49,6 +49,7 @@
     "@temporalio/testing": "^1.24.0",
     "@tsconfig/strictest": "^2.0.8",
     "@types/node": "^26.6.2",
+    "@vitest/coverage-v8": "5.0.1",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.12.0",

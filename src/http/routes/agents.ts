@@ -10,14 +10,9 @@ import { randomUUID } from 'node:crypto';
 import type { Client } from '@temporalio/client';
 import type { FastifyInstance } from 'fastify';
 
-import { agentWorkflow } from '../../../application/agent.workflow';
+import { agentWorkflow } from '../../workflow/agent.workflow';
 
-import {
-  approvePlan,
-  cancelAgent,
-  getState,
-  provideGuidance,
-} from '../../../application/contracts';
+import { approvePlan, cancelAgent, getState, provideGuidance } from '../../workflow/contracts';
 
 import {
   AgentParamsSchema,

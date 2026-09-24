@@ -22,7 +22,7 @@ import {
   type AgentResult,
 } from './contracts';
 
-import { AgentRun } from './agent-run.class';
+import { AgentRun } from './agent-run';
 
 import type { AiToolsActivities } from './ports';
 

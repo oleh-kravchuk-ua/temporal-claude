@@ -1,10 +1,10 @@
 import { pino } from 'pino';
 import { describe, it, expect } from 'vitest';
 
-import type { PlanStep } from '../../domain';
-import { createAiToolsActivities } from './ai-tools';
+import type { PlanStep } from '../workflow/types';
+import { createMockAiTools } from './mock-ai-tools';
 
-const { planTask, runTool, synthesize } = createAiToolsActivities(pino({ level: 'silent' }));
+const { planTask, runTool, synthesize } = createMockAiTools(pino({ level: 'silent' }));
 
 describe('planTask', () => {
   it('produces a non-empty plan with sequential 1-based step ids', async () => {

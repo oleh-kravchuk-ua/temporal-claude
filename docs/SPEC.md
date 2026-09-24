@@ -1,7 +1,7 @@
 # Specification — Temporal AI-Agent workflow
 
 > The behavioral contract the implementation must satisfy. Detailed enough to build and
-> test against. Companion to [`PLAN.md`](./PLAN.md) and [`TASKS.md`](./TASKS.md).
+> test against. Companion to [`PLAN.md`](./PLAN.md).
 
 ## 1. Overview
 
@@ -15,13 +15,14 @@ plan ──▶ AWAIT human approval ──▶ execute steps ──▶ synthesize
    cancel signal ends the run from any waiting/executing point
 ```
 
-All reasoning is **mocked** and lives in the infra activity adapter
-(`infra/activities/ai-tools.ts`) as pure, deterministic functions — that's where a real LLM
-call would go (I/O), so it's an adapter concern, not domain. The workflow contains only
-orchestration. `domain/types.ts` holds the model (types/interfaces); the workflow's
-dependency contract is the `AiToolsActivities` port in `application/ports.ts`.
+All reasoning is **mocked** and lives in the activity implementation
+(`activities/mock-ai-tools.ts`) as pure, deterministic functions — that's where a real LLM
+call would go (I/O), so it's an adapter concern, not the workflow's model. The workflow
+contains only orchestration. `workflow/types.ts` holds the model (types/interfaces); the
+workflow's dependency contract is the `AiToolsActivities` port in `workflow/ports.ts`, and
+`activities/index.ts` is the Strategy seam that selects a concrete implementation.
 
-## 2. Domain model (`src/domain/types.ts`)
+## 2. Domain model (`src/workflow/types.ts`)
 
 ```ts
 export type ToolName = 'search' | 'summarize' | 'draft';
@@ -63,8 +64,8 @@ export interface AgentState {
 }
 ```
 
-The behavior (the mocked "AI") is NOT in the domain — it lives in the infra activity
-adapter (`infra/activities/ai-tools.ts`, §5) as pure, deterministic functions:
+The behavior (the mocked "AI") is NOT here — it lives in the activity implementation
+(`activities/mock-ai-tools.ts`, §5) as pure, deterministic functions:
 
 ```ts
 planTask(topic: string, feedback?: string): Promise<Plan>
@@ -73,9 +74,9 @@ synthesize(topic: string, results: readonly StepResult[]): Promise<string>
 ```
 
 Being pure, they are unit-testable with zero Temporal machinery
-(`infra/activities/ai-tools.test.ts`).
+(`activities/mock-ai-tools.test.ts`).
 
-## 3. Workflow I/O (`src/application/agent.workflow.ts`)
+## 3. Workflow I/O (`src/workflow/agent.workflow.ts`)
 
 ```ts
 export interface AgentInput {
@@ -92,12 +93,12 @@ export interface AgentResult {
 export async function agentWorkflow(input: AgentInput): Promise<AgentResult>;
 ```
 
-## 4. Contracts (`src/application/contracts/`)
+## 4. Contracts (`src/workflow/contracts.ts`)
 
-One contract per file under `contracts/` (agent-input, agent-result, approve-plan,
-provide-guidance, cancel, get-state), re-exported by `contracts/index.ts`. Shared by the
-workflow and any client (the CLI, the HTTP API). The task queue is **config**
-(`config.temporal.taskQueue`, env `TEMPORAL_TASK_QUEUE`), not a contract.
+All signal/query definitions and payload schemas (agent input/result, approve-plan,
+provide-guidance, cancel, get-state) in one file. Shared by the workflow and any client (the
+CLI, the HTTP API). The task queue is **config** (`config.temporal.taskQueue`, env
+`TEMPORAL_TASK_QUEUE`), not a contract.
 
 ```ts
 // Signals
@@ -130,7 +131,8 @@ export interface ApprovePlanInput {
 
 ## 5. Activity port & adapter
 
-**Port** (`src/application/ports.ts`) — the dependency the workflow declares:
+**Port** (`src/workflow/ports.ts`) — the dependency the workflow declares, and the Strategy
+interface the `activities/` implementations are selected behind:
 
 ```ts
 export interface AiToolsActivities {
@@ -140,10 +142,11 @@ export interface AiToolsActivities {
 }
 ```
 
-**Adapter** (`src/infra/activities/ai-tools.ts`) implements the port with the mocked,
+**Implementation** (`src/activities/mock-ai-tools.ts`) implements the port with the mocked,
 deterministic `planTask`/`runTool`/`synthesize` — the single place the fake "AI" lives, and
-where a real LLM call would go. Exported as `aiToolsActivities` typed `satisfies
-AiToolsActivities` so the port and impl can't drift.
+where a real LLM call would go (e.g. a Claude-backed sibling implementation). Typed
+`satisfies AiToolsActivities` so the port and impl can't drift. `src/activities/index.ts` is
+the Strategy selection point `worker.ts` calls — today it only has the mock to choose from.
 
 **Proxy options** (in the workflow):
 
@@ -235,25 +238,26 @@ present. Loading uses Node's native `util.parseEnv` (no dotenv).
 
 ## 6b. Contracts & layer boundaries (strict)
 
-Contracts are explicit at every seam; dependencies point **inward only**
-(`interfaces`/`infra` → `application` → `domain`). Nothing in `domain` imports a framework.
+Contracts are explicit at every seam; the workflow depends only on the port, never on an
+adapter (`http`/`cli`/`activities`/`infra` → `workflow`).
 
-| Seam            | Contract (owner)                                              | Consumers                              | Strictness                                        |
-| --------------- | ------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------- |
-| Config          | `AppConfig` + `AppConfigSchema` (`infra/config`)              | worker, client, connection             | zod at load (runtime)                             |
-| Domain model    | types in `domain/types.ts`                                    | all layers                             | TS types + `strictest`                            |
-| Activity port   | `AiToolsActivities` (`application/ports.ts`)                  | workflow (proxy), infra adapter (impl) | TS interface; adapter must `satisfies` it         |
-| Workflow API    | `AgentInput`, `AgentResult` (`application/agent.workflow.ts`) | CLI, HTTP API, tests                   | zod-validate `AgentInput` at workflow entry       |
-| Signals/queries | defs + payload types (`application/contracts/`)               | workflow, CLI, HTTP API, UI            | zod-validate payloads in handlers (external JSON) |
-| HTTP API        | REST endpoints (`interfaces/http`) — see §6d                  | external HTTP callers                  | zod-validate request body/params; helmet + cors   |
+| Seam            | Contract (owner)                                           | Consumers                           | Strictness                                        |
+| --------------- | ---------------------------------------------------------- | ----------------------------------- | ------------------------------------------------- |
+| Config          | `AppConfig` + `AppConfigSchema` (`infra/config`)           | worker, client, connection          | zod at load (runtime)                             |
+| Domain model    | types in `workflow/types.ts`                               | all layers                          | TS types + `strictest`                            |
+| Activity port   | `AiToolsActivities` (`workflow/ports.ts`)                  | workflow (proxy), activities (impl) | TS interface; impl must `satisfies` it            |
+| Workflow API    | `AgentInput`, `AgentResult` (`workflow/agent.workflow.ts`) | CLI, HTTP API, tests                | zod-validate `AgentInput` at workflow entry       |
+| Signals/queries | defs + payload types (`workflow/contracts.ts`)             | workflow, CLI, HTTP API, UI         | zod-validate payloads in handlers (external JSON) |
+| HTTP API        | REST endpoints (`http/`) — see §6d                         | external HTTP callers               | zod-validate request body/params; helmet + cors   |
 
 **Rules:**
 
-- `application` must **not** import `infra` (workflow proxies the _port_, not the impl).
-- `domain` imports nothing from `application`/`infra`/`@temporalio/*`.
-- `contracts/` is the **single source** of signal/query names and payload types (DRY) —
-  the client and the ops runbook reference it, never re-declare names.
-- The infra adapter is typed `satisfies AiToolsActivities` so the port and impl can't drift.
+- `workflow` must **not** import `infra`/`activities`/`http`/`cli` (it proxies the _port_,
+  not an implementation).
+- `workflow/contracts.ts` is the **single source** of signal/query names and payload types
+  (DRY) — the client and the ops runbook reference it, never re-declare names.
+- Each `activities/` implementation is typed `satisfies AiToolsActivities` so the port and
+  impl can't drift.
 - External JSON (signal payloads, `AgentInput`) is **parsed with zod at the boundary**;
   once past the boundary, code trusts the inferred types.
 
@@ -261,26 +265,26 @@ Contracts are explicit at every seam; dependencies point **inward only**
 
 Not slogans — each maps to something checkable in review:
 
-- **SRP (S):** one reason to change per module — domain = business rules, application =
-  orchestration, infra = I/O/adapters, interfaces = process entrypoints. No mixing.
-- **OCP (O):** new "tools" are added by extending `ToolName` + a domain branch, without
-  editing the workflow's control flow.
+- **SRP (S):** one reason to change per module — `workflow` = orchestration + model,
+  `activities` = tool implementations, `infra` = cross-cutting plumbing (config/logger/
+  connection), `http`/`cli` = process entrypoints. No mixing.
+- **OCP (O):** new "tools" are added by extending `ToolName` + a branch in the active
+  activities implementation, without editing the workflow's control flow.
 - **LSP / ISP (L/I):** `AiToolsActivities` is the minimal port the workflow needs — no
-  extra methods; any implementation satisfying it is substitutable (real vs mocked).
+  extra methods; any implementation satisfying it is substitutable (real vs mocked), which
+  is exactly the Strategy pattern `activities/index.ts` selects between.
 - **DIP (D):** high-level policy (workflow) depends on the port abstraction; the concrete
-  adapter and config are injected at the edges (worker registration, `loadConfig`).
-- **DDD:** ubiquitous language (`Plan`, `PlanStep`, `AgentState`); domain is pure and
-  framework-free; ports & adapters separate core from Temporal.
+  implementation and config are injected at the edges (worker registration, `loadConfig`).
 - **DRY:** one config reader, one contracts module, types inferred from zod schemas (no
   duplicated shape definitions).
 - **KISS:** single package, single task queue, in-memory only; **no** child workflows,
   continue-as-new, DB, or abstraction we don't currently use.
 
-## 6d. HTTP API contract (`src/interfaces/http`)
+## 6d. HTTP API contract (`src/http`)
 
 A **Fastify** app that is a Temporal **Client** (not a worker — it hosts no workflow code).
-It maps REST calls onto the same signals/queries in `contracts/`. Thin adapter: no
-business logic, no state; every handler just validates input and calls the Temporal Client.
+It maps REST calls onto the same signals/queries in `workflow/contracts.ts`. Thin adapter:
+no business logic, no state; every handler just validates input and calls the Temporal Client.
 
 **Cross-cutting:** `@fastify/helmet` (security headers) + `@fastify/cors` (origin from
 `AppConfig.corsOrigin`) registered globally; request/response logging via Fastify's pino.
@@ -300,12 +304,12 @@ business logic, no state; every handler just validates input and calls the Tempo
 **Rules:**
 
 - Signals are fire-and-forget → `202 Accepted` (a signal cannot report workflow outcome).
-- Request schemas live in `interfaces/http/schemas.ts` and **reuse** the payload schemas
-  from `contracts/` where they overlap (e.g. `ApprovePlanInput`) — DRY, no re-declaring.
+- Request schemas live in `http/schemas.ts` and **reuse** the payload schemas from
+  `workflow/contracts.ts` where they overlap (e.g. `ApprovePlanInput`) — DRY, no re-declaring.
 - Map Temporal errors to HTTP: workflow-not-found → `404`; validation → `400`; else `500`
   with a generic message (no internal details leaked — see §7).
-- The API depends only on `application/contracts` + `infra` (Client, config, logger); it
-  must not import `domain` internals or `infra/activities`.
+- The API depends only on `workflow/contracts.ts` + `infra` (Client, config, logger); it
+  must not import `workflow` internals or the `activities` implementations.
 
 ## 7. Determinism & correctness constraints
 
@@ -349,8 +353,8 @@ undefined` — guard array/index reads explicitly.
       `.env`; invalid `LOG_LEVEL` throws a clear error.
 - [ ] **Boundary validation:** malformed `approvePlan` JSON is rejected (logged, state
       unchanged); malformed `AgentInput` throws at workflow entry.
-- [ ] **Boundaries hold:** `application` does not import `infra`; `domain` imports no
-      framework; the HTTP API imports no `domain`/`infra/activities` internals.
+- [ ] **Boundaries hold:** `workflow` does not import `infra`/`activities`/`http`/`cli`; the
+      HTTP API imports no `workflow` internals beyond `contracts.ts`/`agent.workflow.ts`.
 - [ ] **HTTP API:** `POST /agents` starts a run and returns `201 { data: { workflowId } }`;
       `GET /agents/:id` returns the state; `POST .../approve` returns `202` and drives the
       workflow to completion; invalid bodies → `400`; unknown id → `404`; `GET /healthz` →
@@ -373,30 +377,37 @@ A documented checklist against a live stack (`temporal server start-dev` + `npm 
 
 ### Unit — colocated (`*.test.ts` beside the source), collaborators mocked
 
-- `src/infra/activities/ai-tools.test.ts` — the mocked `planTask` / `runTool` / `synthesize`
-  adapter, incl. edge cases.
-- `src/infra/config.test.ts` — defaults with no env files; `.env.local` overrides `.env`;
-  invalid `LOG_LEVEL` throws.
-- `src/application/agent.workflow.test.ts` — `TestWorkflowEnvironment.createTimeSkipping()`
+- `src/activities/mock-ai-tools.test.ts` — the mocked `planTask` / `runTool` / `synthesize`
+  implementation, incl. edge cases.
+- `src/infra/config/config.test.ts` — defaults with no env files; `.env.local` overrides
+  `.env`; invalid `LOG_LEVEL` throws.
+- `src/workflow/agent.workflow.test.ts` — `TestWorkflowEnvironment.createTimeSkipping()`
   with **mocked activities** (the workflow's decision logic in isolation):
   - Happy path — start, assert awaiting approval via `getState`, `approvePlan(true)`, await
     result, assert `completed` + final answer + step count.
   - Reject then approve — `approvePlan(false, 'more detail')`, assert revision bump &
     feedback passed to mocked `planTask`, then approve and complete.
   - Reject limit — reject `MAX_REJECTIONS` times → `rejected`.
-  - Cancel while waiting / during execution → `cancelled`.
-  - Malformed `approvePlan` payload → rejected/ignored, state unchanged.
-- `src/interfaces/http/routes/agents.test.ts` — Fastify `app.inject()` with a **mocked
-  Temporal Client**: status codes, `{data}`/`{error}` envelope, zod `400` on bad bodies,
-  `404` when the client throws not-found, `/healthz`, and that handlers call the right
-  Client method with the validated payload.
+  - Cancel while awaiting approval → `cancelled`.
+  - Cancel during execution (mid-step, via a gated `runTool`) → `cancelled` without running
+    remaining steps.
+  - Malformed `approvePlan` payload → ignored; a later valid signal still completes normally
+    at the same revision.
+  - `approvePlan` received outside `awaiting_approval` (mid-execution, via a gated
+    `runTool`) → ignored, no re-plan.
+  - Blank `provideGuidance` payload → ignored (`state.guidance` stays empty).
+- `src/http/error-handler.test.ts` — the generic 500 fallback (`ZodError`/
+  `WorkflowNotFoundError` are exercised via the e2e test below): unexpected errors map to a
+  `500 { error: { code: 'INTERNAL' } }` envelope with no internal details leaked.
+
+The rest of the HTTP layer (`routes/agents.ts`) has **no separate unit route tests** — it's a
+thin adapter with no branching logic of its own, so it's covered end to end by the feature
+test below instead (real Fastify app, no mocked Client).
 
 ### Feature / e2e — `features/` (repo root), everything real
 
-- `features/agent-lifecycle.feature.test.ts` — test server + **real worker + real
-  activities**: start via the client, query `getState`, send the real `approvePlan` signal,
-  assert the workflow reaches `completed` with a real synthesized answer across all layers.
 - `features/http-api.feature.test.ts` — **real Fastify app → real Temporal Client → real
-  worker**: full path `POST /agents` → `GET /agents/:id` → `POST /agents/:id/approve`, poll
-  until `completed`. Validates the layers actually wire together (API → client → workflow →
-  activities → domain).
+  worker → real activities**, on a time-skipping test server: `POST /agents` → `GET
+/agents/:id` → `POST /agents/:id/approve`, poll until `completed`; plus the `guidance` and
+  `cancel` signals, `400` (bad body), `404` (unknown workflow), and `/healthz`. Validates the
+  layers actually wire together (API → client → workflow → activities).

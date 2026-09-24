@@ -31,7 +31,7 @@
       "Bash(sudo)"
     ]
   },
-  "model": "claude-opus-4-8",
+  "model": "claude-sonnet-5",
   "enabledPlugins": {
     "temporal@temporal-marketplace": true
   }

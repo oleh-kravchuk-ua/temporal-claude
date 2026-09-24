@@ -4,15 +4,15 @@
  * human-in-the-loop approval via the Web UI, the Temporal CLI, or the HTTP API.
  *
  * Run: `npm run start [-- "your topic here"]` (a worker must be polling the task queue).
- * Depends only on the application contracts + infra client/config — never on infra activities
- * or domain internals.
+ * Depends only on the workflow contracts + infra client/config — never on the activities
+ * implementation.
  */
 
 import { randomUUID } from 'node:crypto';
 
-import { agentWorkflow } from '../../application/agent.workflow';
-import { loadConfig } from '../../infra/config';
-import { createClient } from '../../infra/temporal';
+import { agentWorkflow } from '../workflow/agent.workflow';
+import { loadConfig } from '../infra/config';
+import { createClient } from '../infra/temporal';
 
 const DEFAULT_TOPIC = 'Temporal vs cron for scheduled jobs';
 

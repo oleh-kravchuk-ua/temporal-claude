@@ -121,7 +121,7 @@ No dev server or worker needed — the tests boot their own in-process Temporal 
 
 ```bash
 npm test            # everything: unit + endpoint e2e (22 tests)
-npm run test:unit   # colocated unit/component tests (domain, config, workflow state machine)
+npm run test:unit   # colocated unit/component tests (activities, config, workflow state machine)
 npm run test:feature # endpoint e2e in features/ (real Fastify → client → worker → activities)
 npm run build       # strict typecheck (tsc --noEmit)
 npm run lint        # ESLint

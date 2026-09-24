@@ -1,8 +1,7 @@
 /**
- * Infra adapter: the concrete implementation of the `AiToolsActivities` port, registered as
- * Temporal activities by the worker. Today it's a MOCK — deterministic, offline, no I/O — so
- * the demo runs without API keys. In a real system this is exactly where an LLM call would
- * live (I/O, non-deterministic), which is why it belongs in `infra`, not the pure domain.
+ * Concrete `AiToolsActivities` strategy: a MOCK — deterministic, offline, no I/O — so the
+ * demo runs without API keys. A real implementation (e.g. Claude-backed) is exactly where an
+ * LLM call would go; see `activities/index.ts` for how a strategy gets selected.
  *
  * A logger is injected (rather than using `@temporalio/activity`'s `log`, which throws outside
  * an activity context) so the activities log in production yet stay directly unit-testable.
@@ -10,10 +9,10 @@
 
 import type { Logger } from 'pino';
 
-import type { AiToolsActivities } from '../../application/ports';
-import type { ToolName } from '../../domain';
+import type { AiToolsActivities } from '../workflow/ports';
+import type { ToolName } from '../workflow/types';
 
-export const createAiToolsActivities = (logger: Logger): AiToolsActivities => ({
+export const createMockAiTools = (logger: Logger): AiToolsActivities => ({
   planTask: (topic, feedback) => {
     logger.debug({ topic, feedback }, 'planTask');
     const trimmedTopic = topic.trim();

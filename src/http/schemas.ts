@@ -1,15 +1,11 @@
 /**
- * HTTP request schemas. Reuses the application contract schemas where they overlap (DRY) so
+ * HTTP request schemas. Reuses the workflow contract schemas where they overlap (DRY) so
  * the REST surface can't drift from the workflow/signal payloads.
  */
 
 import { z } from 'zod';
 
-import {
-  AgentInputSchema,
-  ApprovePlanInputSchema,
-  GuidanceSchema,
-} from '../../application/contracts';
+import { AgentInputSchema, ApprovePlanInputSchema, GuidanceSchema } from '../workflow/contracts';
 
 /** `POST /agents` body — same shape as the workflow input. */
 export const StartBodySchema = AgentInputSchema;

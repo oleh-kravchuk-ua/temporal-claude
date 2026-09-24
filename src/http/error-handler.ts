@@ -7,17 +7,27 @@ import { WorkflowNotFoundError } from '@temporalio/client';
 import type { FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 
+import { ErrorCode } from './error-code';
+
 export const registerErrorHandler = (app: FastifyInstance): void => {
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
       return reply.code(400).send({
-        error: { code: 'VALIDATION_ERROR', message: 'Invalid request', details: error.issues },
+        error: {
+          code: ErrorCode.VALIDATION_ERROR,
+          message: 'Invalid request',
+          details: error.issues,
+        },
       });
     }
     if (error instanceof WorkflowNotFoundError) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Workflow not found' } });
+      return reply
+        .code(404)
+        .send({ error: { code: ErrorCode.NOT_FOUND, message: 'Workflow not found' } });
     }
     request.log.error(error);
-    return reply.code(500).send({ error: { code: 'INTERNAL', message: 'Internal server error' } });
+    return reply
+      .code(500)
+      .send({ error: { code: ErrorCode.INTERNAL, message: 'Internal server error' } });
   });
 };

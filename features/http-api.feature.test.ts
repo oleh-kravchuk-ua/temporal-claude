@@ -13,8 +13,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { pino } from 'pino';
 
-import { createAiToolsActivities } from '../src/infra/activities/ai-tools';
-import { buildApp } from '../src/interfaces/http/app';
+import { createAiToolsActivities } from '../src/activities';
+import { buildApp } from '../src/http/app';
 
 const TASK_QUEUE = 'test';
 
@@ -26,7 +26,7 @@ let app: FastifyInstance;
 beforeAll(async () => {
   env = await TestWorkflowEnvironment.createTimeSkipping();
   const bundle: WorkflowBundle = await bundleWorkflowCode({
-    workflowsPath: fileURLToPath(new URL('../src/application/agent.workflow.ts', import.meta.url)),
+    workflowsPath: fileURLToPath(new URL('../src/workflow/agent.workflow.ts', import.meta.url)),
   });
   worker = await Worker.create({
     connection: env.nativeConnection,
@@ -61,6 +61,11 @@ const poll = async (id: string, until: (status: string) => boolean): Promise<str
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw new Error('Timed out polling agent status');
+};
+
+const startAgent = async (topic: string): Promise<string> => {
+  const res = await app.inject({ method: 'POST', url: '/agents', payload: { topic } });
+  return res.json<DataBody<{ workflowId: string }>>().data.workflowId;
 };
 
 describe('HTTP API (e2e)', () => {
@@ -103,5 +108,38 @@ describe('HTTP API (e2e)', () => {
   it('healthz is ok', async () => {
     const res = await app.inject({ method: 'GET', url: '/healthz' });
     expect(res.statusCode).toBe(200);
+  });
+
+  it('guidance is reflected in step output once approved', async () => {
+    const workflowId = await startAgent('compare message queues');
+    await poll(workflowId, (s) => s === 'awaiting_approval');
+
+    const guided = await app.inject({
+      method: 'POST',
+      url: `/agents/${workflowId}/guidance`,
+      payload: { guidance: 'prefer recent sources' },
+    });
+    expect(guided.statusCode).toBe(202);
+
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${workflowId}/approve`,
+      payload: { approved: true },
+    });
+    await poll(workflowId, (s) => s === 'completed');
+
+    const final = await app.inject({ method: 'GET', url: `/agents/${workflowId}` });
+    const { results } = final.json<DataBody<{ results: { output: string }[] }>>().data;
+    expect(results.some((r) => r.output.includes('guidance: prefer recent sources'))).toBe(true);
+  });
+
+  it('cancel while awaiting approval ends the run cancelled', async () => {
+    const workflowId = await startAgent('never approve me');
+    await poll(workflowId, (s) => s === 'awaiting_approval');
+
+    const cancelled = await app.inject({ method: 'POST', url: `/agents/${workflowId}/cancel` });
+    expect(cancelled.statusCode).toBe(202);
+
+    expect(await poll(workflowId, (s) => s === 'cancelled')).toBe('cancelled');
   });
 });

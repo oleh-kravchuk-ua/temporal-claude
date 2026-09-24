@@ -10,7 +10,7 @@
 
 import { condition, log } from '@temporalio/workflow';
 
-import type { AgentState, Plan, StepResult } from '../domain';
+import type { AgentState, Plan, StepResult } from './types';
 import {
   ApprovePlanInputSchema,
   GuidanceSchema,
