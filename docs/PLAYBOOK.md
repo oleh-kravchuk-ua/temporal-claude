@@ -17,7 +17,7 @@ flowchart LR
 **Docker (one command):**
 
 ```bash
-docker compose up            # temporal (+ Web UI) + worker + api
+docker compose up --build    # temporal (+ Web UI) + worker + api
 ```
 
 **Bare metal (three terminals):**
@@ -27,6 +27,9 @@ temporal server start-dev    # 1. cluster + Web UI (:7233 / :8233)
 npm run worker               # 2. worker — hosts workflow + activities
 npm run api                  # 3. Fastify REST API on :3000
 ```
+
+> Keep the `--build`: compose reuses an existing image without checking that your code
+> changed, so a plain `docker compose up` can silently run stale code (see the README).
 
 Open the **Web UI at <http://localhost:8233>** and keep it visible — you'll watch workflows
 and their event history there. REST API is at <http://localhost:3000>.
@@ -110,7 +113,8 @@ state "$ID"                 # step outputs include "(guidance: prefer recent sou
   and a `reqId`. Pass your own to trace a call: add `-H 'x-request-id: trace-42'`, then grep
   the api logs for `trace-42` (it also tags the handler's own log lines).
 - **Real Claude:** the same scenarios work with `AI_PROVIDER=claude` (see the README's _Running
-  with real Claude_): `AI_PROVIDER=claude LOG_LEVEL=debug npm run worker`. Each Claude call logs
+  with real Claude_): `AI_PROVIDER=claude LOG_LEVEL=debug npm run worker` (in Docker: set `AI_PROVIDER=claude` and
+  the key in `.env.local`, then `docker compose up --build`). Each Claude call logs
   `durationMs` and token counts. Try _Reject with feedback_ — the re-plan actually follows the
   feedback (e.g. "at most 3 steps") instead of just echoing it — and expect ~30–60 s from
   approval to `completed`.

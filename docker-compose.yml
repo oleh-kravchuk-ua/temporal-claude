@@ -2,8 +2,8 @@
 # HTTP API, and a one-shot client (profile `tools`). worker/api/client are the same image
 # with different commands.
 #
-#   docker compose up                 # temporal + worker + api
-#   docker compose run --rm client    # start one workflow, print its id, exit
+#   docker compose up --build         # temporal + worker + api (--build: never run a stale image)
+#   docker compose run --rm --build client   # start one workflow, print its id, exit
 #   Web UI: http://localhost:8233   ·   REST API: http://localhost:3000
 #
 # App config: each service loads `.env` then `.env.local` (optional — absent in CI/fresh

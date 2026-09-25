@@ -79,14 +79,23 @@ npm install
 ## Run it — Docker (one command)
 
 ```bash
-docker compose up                    # temporal (server + Web UI) + worker + api
-docker compose run --rm client       # start one workflow, print its id, then exit
+docker compose up --build            # temporal (server + Web UI) + worker + api
+docker compose run --rm --build client   # start one workflow, print its id, then exit
 ```
+
+> **Always use `--build`.** The app is baked into the image, and compose reuses an existing
+> image without checking that your code changed. After pulling or editing code, a plain
+> `docker compose up` silently runs the **old** code — for example a worker that ignores
+> `AI_PROVIDER=claude` and quietly uses the mock.
 
 - Web UI: <http://localhost:8233> · REST API: <http://localhost:3000>
 - `worker`, `api` and `client` are one image with different commands; `client` is one-shot
   (`profiles: [tools]`). Compose reads `.env`/`.env.local` and points `TEMPORAL_ADDRESS` at
   the `temporal` service.
+- **Real Claude in Docker:** set `AI_PROVIDER=claude` and `ANTHROPIC_API_KEY` in `.env.local`,
+  then `docker compose up --build`. The values reach the containers at runtime through
+  `env_file`; `.dockerignore` keeps `.env`/`.env.local` out of the image, so the key is never
+  baked in. Values in `.env.local` win over variables exported in your shell.
 
 ## Run it — bare metal
 
