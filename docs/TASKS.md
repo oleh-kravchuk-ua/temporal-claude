@@ -64,11 +64,11 @@ Sizing: XS 1 file · S 1–2 · M 3–5. Global verify for every task: `npm run 
 
 ## Phase 3 — Live verification
 
-- [ ] **T8: Live check + manual HITL run** (S) — needs your `ANTHROPIC_API_KEY`
+- [x] **T8: Live check + manual HITL run** (S) — needs your `ANTHROPIC_API_KEY`
   - Acceptance: `npm run claude:check` (a manual CLI, not a test) proves the connection and reports per-activity latency and how much of the 1-minute activity timeout the slowest call used; a full run (start → approve → completed) is recorded with workflow id, plan and final-answer excerpt; if any call nears 45 s, propose (don't apply) a timeout change.
   - Verify: `npm run claude:check`; `npm test` makes no network calls.
   - Files: `src/cli/claude-check.ts`, `src/cli/latency-stats.ts` (+ test), `package.json`, `vitest.config.ts`, `docs/PLAN.md` (results note)
-  - Status: latency and request-shape checks done manually via `npm run claude:check` (results in `docs/PLAN.md`); the full approve-and-complete HITL run is still to do.
+  - Status: latency and request-shape checks done manually via `npm run claude:check` (results in `docs/PLAN.md`); the full reject-with-feedback → approve → completed run is also done (see `docs/PLAN.md`).
   - Depends: T7
 
 ## Phase 4 — Docs & close-out
@@ -82,5 +82,5 @@ Sizing: XS 1 file · S 1–2 · M 3–5. Global verify for every task: `npm run 
 ### Checkpoint: Complete
 
 - [ ] All 8 success criteria in `docs/SPEC.md` checked off
-- [ ] `/verify` and `/review` run clean
+- [ ] `npm run verify` passes and `/review` reports no CRITICAL/HIGH findings
 - [ ] Ready for PR (feature branch → PR, description links the spec; commit only after approval)
