@@ -48,7 +48,8 @@ export interface ClaudeOptions {
 }
 
 const PLAN_MAX_TOKENS = 2048;
-const STEP_MAX_TOKENS = 2048;
+/** Output cap for one step; see `STEP_MAX_WORDS` for the budget that keeps answers well below it. */
+export const STEP_MAX_TOKENS = 2048;
 const SYNTHESIS_MAX_TOKENS = 4096;
 
 const planFormat = zodOutputFormat(PlanOutputSchema);

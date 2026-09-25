@@ -64,11 +64,19 @@ export const PLANNER_SYSTEM = [
   DATA_RULE,
 ].join('\n');
 
+/**
+ * Word budget for one step's output. A concrete number, because "be concise" alone let a step
+ * run to 1829 of its 2048 output tokens. Keep `STEP_MAX_WORDS * 2 * 4 <= STEP_MAX_TOKENS`
+ * (asserted in `claude-ai-tools.test.ts`) so a slightly wordy answer can't hit `max_tokens`,
+ * which fails the run.
+ */
+export const STEP_MAX_WORDS = 250;
+
 export const STEP_SYSTEM = [
   'You execute one step of a research-style task and return that step’s output as plain text.',
   'The tool tag names your role: search = gather key facts and background; summarize = condense into key findings; draft = write a passage of the final answer.',
   'You have no internet or tool access: answer from your own knowledge, say so when unsure, and never invent sources, URLs or citations.',
-  'Apply any guidance given. Be concise and specific.',
+  `Keep the output under ${String(STEP_MAX_WORDS)} words: a few short paragraphs or a bullet list, no preamble. Apply any guidance given.`,
   DATA_RULE,
 ].join('\n');
 

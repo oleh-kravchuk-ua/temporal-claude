@@ -72,15 +72,21 @@ const run = async (): Promise<void> => {
   // 2. Benchmark through the real adapter. Its own per-call `durationMs` is captured from logs.
   const adapterMs: Record<Activity, number[]> = { planTask: [], runTool: [], synthesize: [] };
   const wallMs: Record<Activity, number[]> = { planTask: [], runTool: [], synthesize: [] };
+  const outputTokens: Record<Activity, number[]> = { planTask: [], runTool: [], synthesize: [] };
   let current: Activity = 'planTask';
 
   const logger = pino(
     { level: 'debug' },
     {
       write: (line: string) => {
-        const entry = JSON.parse(line) as { msg?: string; durationMs?: number };
+        const entry = JSON.parse(line) as {
+          msg?: string;
+          durationMs?: number;
+          outputTokens?: number;
+        };
         if (entry.msg === 'claude response' && typeof entry.durationMs === 'number') {
           adapterMs[current].push(entry.durationMs);
+          outputTokens[current].push(entry.outputTokens ?? 0);
         }
       },
     },
@@ -123,6 +129,7 @@ const run = async (): Promise<void> => {
         requestMax: request.maxMs,
         wallMedian: wall.medianMs,
         wallMax: wall.maxMs,
+        maxOutputTokens: summarize(outputTokens[activity]).maxMs,
       };
     }),
   );

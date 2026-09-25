@@ -6,8 +6,13 @@ import { describe, it, expect, vi } from 'vitest';
 
 import type { PlanStep, StepResult } from '../workflow/types';
 
-import { createClaudeAiTools, type ClaudeClient, type ClaudeResponse } from './claude-ai-tools';
-import { PLANNER_SYSTEM, STEP_SYSTEM, SYNTHESIS_SYSTEM } from './claude-prompts';
+import {
+  createClaudeAiTools,
+  STEP_MAX_TOKENS,
+  type ClaudeClient,
+  type ClaudeResponse,
+} from './claude-ai-tools';
+import { PLANNER_SYSTEM, STEP_MAX_WORDS, STEP_SYSTEM, SYNTHESIS_SYSTEM } from './claude-prompts';
 
 const MODEL = 'claude-sonnet-5';
 const headers = new Headers();
@@ -222,6 +227,12 @@ describe('planTask', () => {
 const step: PlanStep = { id: 2, tool: 'summarize', description: 'Summarize key findings' };
 
 describe('runTool', () => {
+  it('keeps the step word budget at least 4x inside the token cap', () => {
+    // Worst case ~2 tokens per word. A live run once used 1829 of 2048 tokens (89%) with only
+    // "be concise" in the prompt; a wordier answer would have hit max_tokens and failed the run.
+    expect(STEP_MAX_WORDS * 2 * 4).toBeLessThanOrEqual(STEP_MAX_TOKENS);
+  });
+
   it('returns the step id and the model text as the output', async () => {
     const fake = replying('  Key findings: A, B.  ');
 

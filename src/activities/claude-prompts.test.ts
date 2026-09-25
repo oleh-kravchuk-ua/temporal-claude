@@ -5,6 +5,7 @@ import type { PlanStep, StepResult } from '../workflow/types';
 
 import {
   PLANNER_SYSTEM,
+  STEP_MAX_WORDS,
   STEP_SYSTEM,
   SYNTHESIS_SYSTEM,
   PlanOutputSchema,
@@ -149,6 +150,10 @@ describe('system prompts', () => {
       expect(system.length).toBeGreaterThan(0);
       expect(system.toLowerCase()).toContain('data');
     }
+  });
+
+  it('gives the step prompt a concrete word budget (vague "be concise" did not hold)', () => {
+    expect(STEP_SYSTEM).toContain(`${String(STEP_MAX_WORDS)} words`);
   });
 
   it('tells the step prompt there is no internet access', () => {
