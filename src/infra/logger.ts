@@ -3,7 +3,7 @@
  * structured JSON in production. Used by the worker, activities, API, and CLI.
  *
  * NOTE: workflow code must NOT use this — workflows log via `@temporalio/workflow`'s `log`
- * (sinks) to stay deterministic. See SPEC §6a-bis.
+ * (sinks) to stay deterministic. See CLAUDE.md (Toolchain / conventions → Logging).
  */
 
 import { pino, type Logger, type LoggerOptions } from 'pino';
@@ -21,6 +21,13 @@ export const loggerOptions = (config: AppConfig): LoggerOptions => ({
     'headers.cookie',
     'apiKey',
     'temporalApiKey',
+    // Nested: a config object (or its `ai` / `temporal` groups) logged by mistake.
+    '*.apiKey',
+    '*.temporalApiKey',
+    'ai.apiKey',
+    'temporal.connection.apiKey',
+    'config.ai.apiKey',
+    'config.temporal.connection.apiKey',
   ],
   ...(config.nodeEnv === 'production'
     ? {}

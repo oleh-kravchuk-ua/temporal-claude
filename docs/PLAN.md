@@ -95,3 +95,26 @@ Connection OK (1.3 s for a 4-token reply). The API accepted the request shape as
 - **Adapter-measured request time and wall time differ by ≤ 1 ms**, so validation adds no measurable overhead.
 - **Slowest call: 20.6 s, i.e. 34% of the 60 s activity limit and 46% of the 45 s client timeout.** Comfortable, but not huge. The time is output volume, not connection: `runTool` writes the longest text (up to 2048 tokens), which is why it is slower than planning.
 - If it ever needs to be faster or safer against the 45 s client timeout: ask for shorter step outputs in `STEP_SYSTEM` or lower `STEP_MAX_TOKENS`. No change made.
+
+## Full workflow run with real Claude (T8, 2026-09-24, `AI_PROVIDER=claude`, `claude-sonnet-5`)
+
+Local dev server + worker + REST API; topic "How Temporal makes long-running workflows durable". Workflow id `agent-49adf248-385f-4c5c-953b-d37309f65fbf`.
+
+1. `POST /agents` → `planning` → `awaiting_approval` in ~5 s. Claude produced a 4-step plan (search, search, summarize, draft).
+2. **Rejected with feedback** ("Too long. Use at most 3 steps and put the emphasis on failure recovery.") → revision 2 in ~5 s: exactly 3 steps (search, summarize, draft) centred on failure recovery. The feedback reached the model and shaped the plan (spec criterion 4, now verified live).
+3. **Approved** → `executing` → `synthesizing` → `completed` in **62 s**, `stepCount` 3, a 5,304-character `finalAnswer` (a structured, accurate explanation of event history, deterministic replay and worker recovery).
+
+Per-call figures logged by the worker (`claude response`):
+
+| call             | input tokens | output tokens | duration (ms) |
+| ---------------- | ------------ | ------------- | ------------- |
+| planTask (rev 1) | 673          | 208           | 3934          |
+| planTask (rev 2) | 727          | 212           | 3690          |
+| runTool step 1   | 270          | **1829**      | **21653**     |
+| runTool step 2   | 260          | 870           | 11470         |
+| runTool step 3   | 263          | 831           | 9961          |
+| synthesize       | 3716         | 1752          | 17268         |
+
+No warnings or errors; no `sk-ant` string in any log. Throughput is ~85 output tokens/s, so latency is dominated by output length.
+
+**Finding — token-cap headroom:** `runTool` step 1 used **1829 of its 2048-token cap (89%)**. A slightly wordier answer would hit `max_tokens`, which the adapter treats as a non-retryable failure and fails the run. The 60 s activity limit and 45 s client timeout are fine (slowest call 21.7 s), so the cap is the tighter constraint. Options, none applied yet: ask for shorter step outputs in `STEP_SYSTEM` (e.g. "at most ~300 words"), and/or raise `STEP_MAX_TOKENS`.

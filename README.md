@@ -149,20 +149,24 @@ All config flows through `src/infra/config` (the only reader of `process.env`), 
 into a frozen `AppConfig`. Precedence: real env → `.env.local` → `.env` → built-in defaults —
 so it **runs with no env files at all**. Copy `.env.example` to `.env` to customize.
 
-| Variable                  | Default            | Purpose                                              |
-| ------------------------- | ------------------ | ---------------------------------------------------- |
-| `TEMPORAL_ADDRESS`        | `localhost:7233`   | Temporal gRPC endpoint                               |
-| `TEMPORAL_NAMESPACE`      | `default`          | namespace                                            |
-| `TEMPORAL_TASK_QUEUE`     | `ai-agent`         | task queue the worker polls / clients target         |
-| `TEMPORAL_API_KEY`        | —                  | set in `.env.local` for Temporal Cloud (enables TLS) |
-| `HTTP_PORT` / `HTTP_HOST` | `3000` / `0.0.0.0` | REST API bind                                        |
-| `CORS_ORIGIN`             | `*`                | allowed CORS origin                                  |
-| `LOG_LEVEL`               | `info`             | pino level                                           |
-| `NODE_ENV`                | `development`      | `production` → JSON logs                             |
+| Variable                  | Default            | Purpose                                                                  |
+| ------------------------- | ------------------ | ------------------------------------------------------------------------ |
+| `TEMPORAL_ADDRESS`        | `localhost:7233`   | Temporal gRPC endpoint                                                   |
+| `TEMPORAL_NAMESPACE`      | `default`          | namespace                                                                |
+| `TEMPORAL_TASK_QUEUE`     | `ai-agent`         | task queue the worker polls / clients target                             |
+| `TEMPORAL_API_KEY`        | —                  | set in `.env.local` for Temporal Cloud (enables TLS)                     |
+| `HTTP_PORT` / `HTTP_HOST` | `3000` / `0.0.0.0` | REST API bind                                                            |
+| `CORS_ORIGIN`             | `*`                | allowed CORS origin                                                      |
+| `LOG_LEVEL`               | `info`             | pino level                                                               |
+| `NODE_ENV`                | `development`      | `production` → JSON logs                                                 |
+| `AI_PROVIDER`             | `mock`             | `mock` (offline) or `claude` (real API)                                  |
+| `ANTHROPIC_API_KEY`       | —                  | required when `AI_PROVIDER=claude`; set in `.env.local`, never commit it |
+| `ANTHROPIC_MODEL`         | `claude-sonnet-5`  | model used when `AI_PROVIDER=claude`                                     |
 
-`AppConfig` is grouped by concern (`http.*`, `temporal.connection.*`, `temporal.taskQueue`);
-the flat env vars above map onto it. Dev → Temporal Cloud is a config change (address +
-`TEMPORAL_API_KEY`), not a code change.
+`AppConfig` is grouped by concern (`http.*`, `temporal.connection.*`, `temporal.taskQueue`,
+`ai.*`); the flat env vars above map onto it. With `AI_PROVIDER=claude` and no key, startup
+fails fast. Dev → Temporal Cloud is a config change (address + `TEMPORAL_API_KEY`), not a code
+change.
 
 ## Testing
 
@@ -186,6 +190,7 @@ No dev server or worker needed.
 | `lint` / `lint:fix`                                  | ESLint                                                                    |
 | `format` / `format:check`                            | Prettier                                                                  |
 | `test` / `test:unit` / `test:feature` / `test:watch` | Vitest                                                                    |
+| `verify`                                             | format:check + lint + build + test (the full gate)                        |
 
 ## Tooling
 
