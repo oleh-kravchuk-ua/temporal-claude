@@ -26,6 +26,8 @@ this command only adds the project-specific checks below.
 - Zod validates every boundary: HTTP body/params, signal payloads, env (via `infra/config` only).
 - `ANTHROPIC_API_KEY` / `TEMPORAL_API_KEY` are never logged, echoed or put in error messages;
   check pino's `redact` covers the actual leak path, not just the happy-path field.
+- Anything shown to clients (`AgentState.error`, HTTP error bodies) never carries raw upstream or
+  activity error text; only messages our own code authored.
 - A new env var is added to `infra/config`, `.env.example` and the README table.
 - A process entrypoint that catches an error sets `process.exitCode` or rethrows.
 

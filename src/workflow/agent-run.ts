@@ -6,9 +6,11 @@
  *
  * State machine (see CLAUDE.md, Workflow rules): plan → await approval → (reject → re-plan, up to MAX_REJECTIONS) →
  * execute steps → synthesize → complete. A `cancel` signal ends the run from any wait point.
+ * If an activity fails for good, the run records `failed` (and why) in its state and then rethrows,
+ * so the workflow still ends FAILED in Temporal while `getState` tells clients what happened.
  */
 
-import { condition, log } from '@temporalio/workflow';
+import { ActivityFailure, condition, log } from '@temporalio/workflow';
 
 import type { AgentState, Plan, StepResult } from './types';
 import {
@@ -17,6 +19,7 @@ import {
   type AgentResult,
   type ApprovePlanInput,
 } from './contracts';
+import { describeActivityFailure } from './failure-message';
 import type { AiToolsActivities } from './ports';
 
 /** Max plan rejections before the run ends as `rejected`. */
@@ -30,6 +33,7 @@ export class AgentRun {
   private revision = 0;
   private plan?: Plan;
   private finalAnswer?: string;
+  private error: string | undefined;
   // Reset to `undefined` at runtime → declared with explicit `| undefined`
   // (exactOptionalPropertyTypes forbids assigning undefined to a `?:` field).
   private currentStepId: number | undefined;
@@ -54,6 +58,7 @@ export class AgentRun {
       ...(this.plan ? { plan: this.plan } : {}),
       ...(this.currentStepId !== undefined ? { currentStepId: this.currentStepId } : {}),
       ...(this.finalAnswer !== undefined ? { finalAnswer: this.finalAnswer } : {}),
+      ...(this.error !== undefined ? { error: this.error } : {}),
     };
   }
 
@@ -86,8 +91,22 @@ export class AgentRun {
     this.cancelled = true;
   }
 
-  /** Drive the run to a terminal result, using the injected activities. */
+  /**
+   * Drive the run to a terminal result, using the injected activities. An activity that fails for
+   * good is recorded in the state and rethrown, so the workflow still fails visibly in Temporal.
+   */
   async execute(activities: AiToolsActivities): Promise<AgentResult> {
+    try {
+      return await this.runToResult(activities);
+    } catch (error) {
+      if (error instanceof ActivityFailure) {
+        this.recordFailure(error);
+      }
+      throw error;
+    }
+  }
+
+  private async runToResult(activities: AiToolsActivities): Promise<AgentResult> {
     log.info('Agent run started', { topic: this.topic });
     const planning = await this.planUntilApproved(activities);
     if (planning !== 'approved') {
@@ -161,6 +180,17 @@ export class AgentRun {
     this.status = 'synthesizing';
     log.info('Synthesizing final answer', { steps: this.results.length });
     this.finalAnswer = await activities.synthesize(this.topic, this.results);
+  }
+
+  private recordFailure(failure: ActivityFailure): void {
+    this.status = 'failed';
+    this.error = describeActivityFailure(failure);
+    log.error('Agent run failed', {
+      activity: failure.activityType,
+      retryState: String(failure.retryState),
+      revision: this.revision,
+      stepCount: this.results.length,
+    });
   }
 
   /** Read-and-clear the latest approval (the method boundary preserves the declared type). */

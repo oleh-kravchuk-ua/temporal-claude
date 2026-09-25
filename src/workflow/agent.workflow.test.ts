@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
+import { ApplicationFailure } from '@temporalio/activity';
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker, bundleWorkflowCode, type WorkflowBundle } from '@temporalio/worker';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -211,6 +212,86 @@ describe('agentWorkflow', () => {
       const result = await handle.result();
       expect(result.status).toBe('cancelled');
       expect(runTool).toHaveBeenCalledTimes(1); // step 2 never ran
+    });
+  });
+
+  describe('activity failures', () => {
+    /** The workflow still ends FAILED in Temporal; what matters is that the query says so too. */
+    const failedState = async (handle: Handle): Promise<AgentState> => {
+      await expect(handle.result()).rejects.toThrow();
+      return handle.query(getState);
+    };
+
+    const permanent = (message: string): ApplicationFailure =>
+      ApplicationFailure.nonRetryable(message, 'TestPermanent');
+
+    it('planTask failing permanently → state says failed, with a safe error (no retries)', async () => {
+      const planTask = vi.fn((): Promise<Plan> =>
+        Promise.reject(permanent('Claude API rejected the request (HTTP 401)')),
+      );
+
+      await withWorker(mockActivities({ planTask }), async () => {
+        const state = await failedState(await startAgent());
+
+        expect(state.status).toBe('failed');
+        expect(state.error).toBe('Claude API rejected the request (HTTP 401)');
+        expect(state.revision).toBe(1);
+        expect(planTask).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('runTool failing on step 2 keeps the finished work and the failing step', async () => {
+      const runTool = vi.fn((step: PlanStep) =>
+        step.id === 2
+          ? Promise.reject(permanent('step 2 refused'))
+          : Promise.resolve({ stepId: step.id, output: `out-${step.id}` }),
+      );
+
+      await withWorker(mockActivities({ runTool }), async () => {
+        const handle = await startAgent();
+        await waitFor(handle, awaitingRevision(1));
+        await handle.signal(approvePlan, { approved: true });
+
+        const state = await failedState(handle);
+
+        expect(state.status).toBe('failed');
+        expect(state.error).toBe('step 2 refused');
+        expect(state.currentStepId).toBe(2);
+        expect(state.results).toHaveLength(1);
+        expect(state.finalAnswer).toBeUndefined();
+      });
+    });
+
+    it('synthesize failing keeps all step results', async () => {
+      const synthesize = vi.fn(() => Promise.reject(permanent('synthesis refused')));
+
+      await withWorker(mockActivities({ synthesize }), async () => {
+        const handle = await startAgent();
+        await waitFor(handle, awaitingRevision(1));
+        await handle.signal(approvePlan, { approved: true });
+
+        const state = await failedState(handle);
+
+        expect(state.status).toBe('failed');
+        expect(state.error).toBe('synthesis refused');
+        expect(state.results).toHaveLength(2);
+      });
+    });
+
+    it('retryable failures exhaust the attempts; the raw message never reaches state.error', async () => {
+      const planTask = vi.fn((): Promise<Plan> =>
+        Promise.reject(new Error('upstream 429 body with req_123 and org details')),
+      );
+
+      await withWorker(mockActivities({ planTask }), async () => {
+        const state = await failedState(await startAgent());
+
+        expect(state.status).toBe('failed');
+        expect(planTask).toHaveBeenCalledTimes(3);
+        expect(state.error).toBe('Activity "planTask" failed (MAXIMUM_ATTEMPTS_REACHED)');
+        expect(state.error).not.toContain('req_123');
+        expect(state.error).not.toContain('org details');
+      });
     });
   });
 });

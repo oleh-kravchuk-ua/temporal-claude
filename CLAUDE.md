@@ -26,7 +26,8 @@ Key mental model: **the workflow runs inside the worker**, not a container of it
 
 ## Workflow rules
 
-- Lifecycle: `planning → awaiting_approval → executing → synthesizing → completed`, with `rejected` (3rd rejection, `MAX_REJECTIONS`) and `cancelled` as terminal exits. Diagram in `README.md`.
+- Lifecycle: `planning → awaiting_approval → executing → synthesizing → completed`, with `rejected` (3rd rejection, `MAX_REJECTIONS`), `cancelled` and `failed` as terminal exits. Diagram in `README.md`.
+- **Failures are recorded, then rethrown:** `AgentRun.execute` catches an `ActivityFailure` (a permanent error, or retries exhausted), sets `status: 'failed'` plus a client-safe `error` in the state, and rethrows, so the workflow still ends FAILED in Temporal _and_ `getState`/`GET /agents/:id` say so (without this a failed run looked stuck in `planning`). `failure-message.ts` shows only our own non-retryable messages verbatim; a retryable failure that ran out of attempts gets a generic message, because its raw text can echo upstream details. Keep adapter non-retryable messages free of upstream text.
 - `approvePlan` is ignored unless the run is `awaiting_approval`; invalid signal payloads are zod-validated, logged and **ignored** (a signal can't fail its sender); malformed `AgentInput` throws at workflow entry. `getState` is strictly read-only.
 - **Determinism:** no `Date.now()`/`Math.random()`/I/O in workflow code (all non-determinism lives in activities); signal and query handlers are **non-async** and run no activities. Use the `temporal:temporal-developer` skill for anything deeper.
 - Scope is deliberately small (KISS): one workflow, one task queue, in-memory only — **no** child workflows, continue-as-new, DB, or frontend. New tools = extend `ToolName` + a branch in the active activities implementation, without editing workflow control flow.
