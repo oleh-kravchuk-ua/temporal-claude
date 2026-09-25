@@ -78,6 +78,13 @@ const thrown = async (fn: () => Promise<unknown>): Promise<unknown> => {
   return expect.unreachable('expected the call to throw');
 };
 
+/** A transient API error: retryable, with our own message (never the upstream text). */
+const expectRetryable = (error: unknown, upstreamText: string): void => {
+  expect(error).toBeInstanceOf(ApplicationFailure);
+  expect((error as ApplicationFailure).nonRetryable).toBe(false);
+  expect((error as ApplicationFailure).message).not.toContain(upstreamText);
+};
+
 const expectNonRetryable = (error: unknown): void => {
   expect(error).toBeInstanceOf(ApplicationFailure);
   expect((error as ApplicationFailure).nonRetryable).toBe(true);
@@ -177,13 +184,21 @@ describe('planTask', () => {
     expectNonRetryable(await thrown(() => tools(fake).planTask('t')));
   });
 
-  it('leaves transient API errors retryable (rethrown as-is)', async () => {
-    for (const error of [
-      new RateLimitError(429, {}, 'slow down', headers),
-      new InternalServerError(529, {}, 'overloaded', headers),
-    ]) {
-      expect(await thrown(() => tools(failing(error)).planTask('t'))).toBe(error);
+  it('turns transient API errors into retryable failures that hide the upstream text', async () => {
+    for (const [error, upstream] of [
+      [new RateLimitError(429, {}, 'slow down req_1', headers), 'req_1'],
+      [new InternalServerError(529, {}, 'overloaded req_2', headers), 'req_2'],
+    ] as const) {
+      expectRetryable(await thrown(() => tools(failing(error)).planTask('t')), upstream);
     }
+  });
+
+  it("passes the server retry-after through as the failure's next retry delay", async () => {
+    const error = new RateLimitError(429, {}, 'slow', new Headers({ 'retry-after': '9' }));
+
+    const failure = await thrown(() => tools(failing(error)).planTask('t'));
+
+    expect((failure as ApplicationFailure).nextRetryDelay).toBe(9000);
   });
 
   it('makes permanent API errors non-retryable', async () => {
@@ -288,8 +303,8 @@ describe('runTool', () => {
   });
 
   it('leaves transient errors retryable and permanent errors non-retryable', async () => {
-    const transient = new RateLimitError(429, {}, 'slow', headers);
-    expect(await thrown(() => tools(failing(transient)).runTool(step, []))).toBe(transient);
+    const transient = new RateLimitError(429, {}, 'slow req_3', headers);
+    expectRetryable(await thrown(() => tools(failing(transient)).runTool(step, [])), 'req_3');
 
     const permanent = failing(new BadRequestError(400, {}, 'bad', headers));
     expectNonRetryable(await thrown(() => tools(permanent).runTool(step, [])));
@@ -335,8 +350,11 @@ describe('synthesize', () => {
   });
 
   it('leaves transient errors retryable', async () => {
-    const transient = new InternalServerError(500, {}, 'oops', headers);
+    const transient = new InternalServerError(500, {}, 'oops req_4', headers);
 
-    expect(await thrown(() => tools(failing(transient)).synthesize('t', results))).toBe(transient);
+    expectRetryable(
+      await thrown(() => tools(failing(transient)).synthesize('t', results)),
+      'req_4',
+    );
   });
 });

@@ -182,7 +182,8 @@ Good to know:
   on Sonnet 5. `npm test` never calls the API.
 - **Speed** (Sonnet 5): plan ≈ 5 s, each step ≈ 8 s, synthesis ≈ 8 s, so a run takes roughly
   30–60 s after approval. `LOG_LEVEL=debug` shows per-call `durationMs` and token counts.
-- **Failures:** rate limits, 5xx and timeouts are retried (3 attempts, 1-minute limit each). A
+- **Failures:** rate limits, overloads (429/529), 5xx and timeouts are retried (4 attempts: waits
+  of 2, 4 and 8 s, or the wait the API asks for in `retry-after`; 1-minute limit per attempt). A
   refusal, a bad key or a truncated/empty answer is permanent. Either way, when an activity
   finally fails the run ends **`failed`**: `GET /agents/:id` shows `status: "failed"` and a short
   `error` (your own adapters' safe message, or a generic "Activity … failed (…)" — never the raw

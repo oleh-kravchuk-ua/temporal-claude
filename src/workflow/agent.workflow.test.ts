@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { ApplicationFailure } from '@temporalio/activity';
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker, bundleWorkflowCode, type WorkflowBundle } from '@temporalio/worker';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentState, Plan, PlanStep } from './types';
 import { agentWorkflow } from './agent.workflow';
@@ -12,7 +12,13 @@ import { approvePlan, cancelAgent, getState, provideGuidance } from './contracts
 import type { ApprovePlanInput } from './contracts';
 import type { AiToolsActivities } from './ports';
 
-const TASK_QUEUE = 'test';
+// A fresh queue per test: a run left over from an earlier test (say, one with a pending activity
+// retry) must not be picked up by the next test's worker and call the wrong fake activities.
+let taskQueue = 'test';
+
+beforeEach(() => {
+  taskQueue = `test-${randomUUID()}`;
+});
 
 let env: TestWorkflowEnvironment;
 let bundle: WorkflowBundle;
@@ -50,7 +56,7 @@ const withWorker = async (
 ): Promise<void> => {
   const worker = await Worker.create({
     connection: env.nativeConnection,
-    taskQueue: TASK_QUEUE,
+    taskQueue,
     workflowBundle: bundle,
     activities,
   });
@@ -59,7 +65,7 @@ const withWorker = async (
 
 const startAgent = (topic = 'temporal vs cron') =>
   env.client.workflow.start(agentWorkflow, {
-    taskQueue: TASK_QUEUE,
+    taskQueue,
     workflowId: `agent-${randomUUID()}`,
     args: [{ topic }],
   });
@@ -287,10 +293,62 @@ describe('agentWorkflow', () => {
         const state = await failedState(await startAgent());
 
         expect(state.status).toBe('failed');
-        expect(planTask).toHaveBeenCalledTimes(3);
+        expect(planTask).toHaveBeenCalledTimes(4);
         expect(state.error).toBe('Activity "planTask" failed (MAXIMUM_ATTEMPTS_REACHED)');
         expect(state.error).not.toContain('req_123');
         expect(state.error).not.toContain('org details');
+      });
+    });
+  });
+  describe('retry policy', () => {
+    it('recovers when a transient failure clears within the attempts (3 failures, 4th succeeds)', async () => {
+      let calls = 0;
+      const planTask = vi.fn((topic: string): Promise<Plan> => {
+        calls += 1;
+        return calls < 4 ? Promise.reject(new Error('transient')) : Promise.resolve(plan(topic));
+      });
+
+      await withWorker(mockActivities({ planTask }), async () => {
+        const handle = await startAgent();
+        // The retry waits (2 s + 4 s + 8 s) are virtual time; polling alone would never see them pass.
+        await env.sleep('30s');
+        await waitFor(handle, awaitingRevision(1));
+
+        expect(planTask).toHaveBeenCalledTimes(4);
+      });
+    });
+
+    it("waits the failure's own nextRetryDelay before the next attempt", async () => {
+      let calls = 0;
+      const planTask = vi.fn((topic: string): Promise<Plan> => {
+        calls += 1;
+        return calls === 1
+          ? Promise.reject(
+              ApplicationFailure.create({ message: 'slow down', nextRetryDelay: '40s' }),
+            )
+          : Promise.resolve(plan(topic));
+      });
+
+      await withWorker(mockActivities({ planTask }), async () => {
+        const handle = await startAgent();
+        // Let the first attempt run and fail, then advance the virtual clock past the delay.
+        await env.sleep('2s');
+        expect(planTask).toHaveBeenCalledTimes(1);
+        await env.sleep('60s');
+        await waitFor(handle, awaitingRevision(1));
+
+        // Read the delay the server actually applied from the history timestamps: attempt 1 was
+        // scheduled at t0, attempt 2 started after the wait (a plain backoff would be ~2 s).
+        const events = (await handle.fetchHistory()).events ?? [];
+        const seconds = (
+          kind: 'activityTaskScheduledEventAttributes' | 'activityTaskStartedEventAttributes',
+        ): number => Number(events.find((event) => event[kind])?.eventTime?.seconds ?? 0);
+        const applied =
+          seconds('activityTaskStartedEventAttributes') -
+          seconds('activityTaskScheduledEventAttributes');
+
+        expect(planTask).toHaveBeenCalledTimes(2);
+        expect(applied).toBeGreaterThanOrEqual(40);
       });
     });
   });

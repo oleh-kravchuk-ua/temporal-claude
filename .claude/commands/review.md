@@ -41,8 +41,9 @@ this command only adds the project-specific checks below.
 
 **Claude adapter** (`src/activities/claude-*`, `activities/index.ts`)
 
-- Transient failures (429, 5xx, connection) are rethrown; permanent ones (400/401/403/404/422,
-  refusal, truncation, empty output) are non-retryable `ApplicationFailure`s.
+- Transient API failures (429, 5xx) are retryable `ApplicationFailure`s with a sanitized message
+  and the server's `retry-after` as `nextRetryDelay`; connection errors pass through; permanent
+  ones (400/401/403/404/422, refusal, truncation, empty output) are non-retryable.
 - The client keeps `maxRetries: 0` and a timeout below `ACTIVITY_START_TO_CLOSE_MS`.
 - `claude-sonnet-5` requests send no `temperature`/`top_p`/`budget_tokens`/prefill, and set
   `thinking: { type: 'disabled' }` explicitly.

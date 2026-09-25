@@ -22,14 +22,14 @@ import {
   type AgentResult,
 } from './contracts';
 
-import { ACTIVITY_START_TO_CLOSE_MS } from './activity-timeout';
+import { ACTIVITY_RETRY, ACTIVITY_START_TO_CLOSE_MS } from './activity-timeout';
 import { AgentRun } from './agent-run';
 
 import type { AiToolsActivities } from './ports';
 
 const activities = proxyActivities<AiToolsActivities>({
   startToCloseTimeout: ACTIVITY_START_TO_CLOSE_MS,
-  retry: { initialInterval: '1s', maximumAttempts: 3 },
+  retry: ACTIVITY_RETRY,
 });
 
 export const agentWorkflow = async (input: AgentInput): Promise<AgentResult> => {
