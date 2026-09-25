@@ -44,8 +44,8 @@ a worker polls the `ai-agent` task queue.
 ## Running — Docker Compose (closer to deployed)
 
 ```bash
-docker compose up                     # temporal + worker + api come up
-docker compose run --rm client        # start one workflow (prints its id), then exits
+docker compose up --build             # temporal + worker + api come up (--build: an old image runs old code)
+docker compose run --rm --build client   # start one workflow (prints its id), then exits
 # or start via the API: curl -sX POST localhost:3000/agents -d '{"topic":"…"}' -H 'content-type: application/json'
 ```
 
