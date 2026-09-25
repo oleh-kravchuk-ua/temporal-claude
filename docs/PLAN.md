@@ -117,4 +117,18 @@ Per-call figures logged by the worker (`claude response`):
 
 No warnings or errors; no `sk-ant` string in any log. Throughput is ~85 output tokens/s, so latency is dominated by output length.
 
-**Finding — token-cap headroom:** `runTool` step 1 used **1829 of its 2048-token cap (89%)**. A slightly wordier answer would hit `max_tokens`, which the adapter treats as a non-retryable failure and fails the run. The 60 s activity limit and 45 s client timeout are fine (slowest call 21.7 s), so the cap is the tighter constraint. Options, none applied yet: ask for shorter step outputs in `STEP_SYSTEM` (e.g. "at most ~300 words"), and/or raise `STEP_MAX_TOKENS`.
+**Finding — token-cap headroom:** `runTool` step 1 used **1829 of its 2048-token cap (89%)**. A slightly wordier answer would hit `max_tokens`, which the adapter treats as a non-retryable failure and fails the run. The 60 s activity limit and 45 s client timeout are fine (slowest call 21.7 s), so the cap is the tighter constraint. **Resolved** (below).
+
+### Fix: concrete word budget for step outputs (measured 2026-09-25)
+
+`STEP_SYSTEM` said only "Be concise and specific", which did not hold. It now states a concrete budget (`STEP_MAX_WORDS = 250`: "Keep the output under 250 words: a few short paragraphs or a bullet list, no preamble"). A unit test keeps the budget at least 4x inside `STEP_MAX_TOKENS` (2048), so the two can't drift apart. `claude:check` now also reports `maxOutputTokens`. Same model, 3 runs each:
+
+| metric                          | before        | after           |
+| ------------------------------- | ------------- | --------------- |
+| `runTool` max output tokens     | 1829          | **683**         |
+| `runTool` share of the 2048 cap | 89%           | **33%**         |
+| `runTool` median / max latency  | 15.6 / 20.6 s | **8.4 / 8.5 s** |
+| `synthesize` max output tokens  | 1752          | 967             |
+| slowest call vs 60 s limit      | 34%           | **17%**         |
+
+The model treats the budget as soft (683 tokens is more than 250 words), but there is now about 3x headroom. **Trade-off:** shorter step outputs give the synthesizer less material, so the final answer is shorter too (~967 tokens against ~1752 before). If a fuller final answer matters more than speed, raise `STEP_MAX_WORDS` (the headroom test bounds it at 256) and `STEP_MAX_TOKENS` together.
