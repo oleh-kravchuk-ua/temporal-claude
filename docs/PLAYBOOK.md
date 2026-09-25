@@ -109,6 +109,11 @@ state "$ID"                 # step outputs include "(guidance: prefer recent sou
 - **HTTP access log:** each request logs one line with `responseTimeMs`, `rssMB`/`heapUsedMB`,
   and a `reqId`. Pass your own to trace a call: add `-H 'x-request-id: trace-42'`, then grep
   the api logs for `trace-42` (it also tags the handler's own log lines).
+- **Real Claude:** the same scenarios work with `AI_PROVIDER=claude` (see the README's _Running
+  with real Claude_): `AI_PROVIDER=claude LOG_LEVEL=debug npm run worker`. Each Claude call logs
+  `durationMs` and token counts. Try _Reject with feedback_ — the re-plan actually follows the
+  feedback (e.g. "at most 3 steps") instead of just echoing it — and expect ~30–60 s from
+  approval to `completed`.
 - **Durability:** start a run, leave it `awaiting_approval`, restart the worker
   (`Ctrl-C` → `npm run worker`), then approve — it resumes and completes (state lived in
   Temporal, not the worker).

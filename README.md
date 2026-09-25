@@ -2,8 +2,10 @@
 
 A small **human-in-the-loop AI agent** built on [Temporal](https://temporal.io) (TypeScript).
 A workflow plans a task, **waits for a human to approve the plan**, executes the approved
-steps, and synthesizes a result. The "AI" is **mocked** (deterministic, offline, no API
-keys) — the point is durable, human-in-the-loop orchestration, not real inference.
+steps, and synthesizes a result. The "AI" is **mocked** by default (deterministic, offline, no
+API keys) and can be switched to **real Claude** with one setting (see
+[Running with real Claude](#running-with-real-claude)) — the point is durable,
+human-in-the-loop orchestration, not real inference.
 
 ```mermaid
 stateDiagram-v2
@@ -29,7 +31,7 @@ never on an adapter:
 ```
 src/
 ├── workflow/       # agentWorkflow + AgentRun + contracts (signals/queries) + ports.ts + types.ts
-├── activities/      # AiToolsActivities strategies (mock today; Claude-backed later) + the selector
+├── activities/      # AiToolsActivities strategies (mock + Claude-backed) + the selector
 ├── infra/           # config, logger (pino), temporal connection, process-error handlers
 ├── worker.ts         # entrypoint: hosts the workflow + activities
 ├── http/             # Fastify REST API (a Temporal client)
@@ -40,8 +42,8 @@ Key idea: **the workflow runs inside the worker**, not a container of its own. T
 server is the cluster (orchestration + durable history + Web UI). The CLI, the REST API, and
 the Web UI are all just _clients_ that start/signal/query workflows. The workflow depends on
 the `AiToolsActivities` **port** (`workflow/ports.ts`); concrete implementations live in
-`activities/`, selected by `activities/index.ts` — today that's just the mock, swapping in a
-real LLM call later won't touch the workflow.
+`activities/`, selected by `activities/index.ts` from `AI_PROVIDER` — the offline mock
+(default) or Claude — and the workflow never knows which one it got.
 
 ```mermaid
 flowchart LR
@@ -142,6 +144,34 @@ temporal workflow signal -w <id> --name approvePlan --input '{"approved":true}'
 
 **Web UI** — open <http://localhost:8233>, find the workflow, inspect its history, and send
 the `approvePlan` signal / `getState` query.
+
+## Running with real Claude
+
+By default the agent uses the offline mock. To use Claude instead:
+
+1. In the Anthropic Console, create an API key **inside a workspace**. An organization-scoped
+   key is rejected with `400 … not scoped to a workspace`.
+2. Put it in `.env.local` (git-ignored — never commit it):
+
+   ```bash
+   AI_PROVIDER=claude
+   ANTHROPIC_API_KEY=sk-ant-...
+   # ANTHROPIC_MODEL=claude-sonnet-5   # optional override
+   ```
+
+3. Check the connection and see typical latency: `npm run claude:check`.
+4. Start the worker as usual (`npm run worker`). It logs `AI provider selected` with the provider
+   and model only — never the key. Everything else (API, CLI, approval flow) is unchanged.
+
+Good to know:
+
+- **Cost:** a 3-step run makes about 6 Claude calls (plan, one per step, synthesize) — a few cents
+  on Sonnet 5. `npm test` never calls the API.
+- **Speed** (Sonnet 5): plan ≈ 5 s, each step ≈ 8 s, synthesis ≈ 8 s, so a run takes roughly
+  30–60 s after approval. `LOG_LEVEL=debug` shows per-call `durationMs` and token counts.
+- **Failures:** rate limits, 5xx and timeouts are retried (3 attempts, 1-minute limit each). A
+  refusal or a truncated/empty answer is permanent and fails the run. Rejecting a plan with
+  feedback sends that feedback to Claude, which re-plans accordingly.
 
 ## Configuration
 
