@@ -141,3 +141,9 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Claude Code: personal, per-machine settings (shared settings live in .claude/settings.json)
+.claude/settings.local.json
+
+# Personal follow-up notes (not shared)
+docs/NEXT.local.md

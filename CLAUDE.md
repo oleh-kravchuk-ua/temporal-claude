@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A small application to test orchestration for running AI tools within [Temporal](https://temporal.io). Concretely: a **human-in-the-loop AI agent** — a Temporal workflow that plans a task, waits for a human to approve the plan (via signals), executes the steps, and synthesizes a result. The "AI" is **mocked** by default (offline, no API keys) and switches to a real Claude-backed strategy with `AI_PROVIDER=claude`; the point is the durable-execution orchestration, not real inference.
 
-`README.md` is the user-facing guide (run, REST API, config, state diagram); `docs/PLAYBOOK.md` has copy-paste manual scenarios. Open follow-ups: `docs/NEXT.md`.
+`README.md` is the user-facing guide (run, REST API, config, state diagram); `docs/PLAYBOOK.md` has copy-paste manual scenarios.
 
 ## Architecture
 
