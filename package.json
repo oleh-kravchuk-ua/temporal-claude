@@ -27,6 +27,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "verify": "npm run format:check && npm run lint && npm run build && npm test",
     "test:unit": "vitest run src",
     "test:feature": "vitest run features",
     "test:watch": "vitest",

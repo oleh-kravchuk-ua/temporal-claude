@@ -1,103 +1,62 @@
 # /review
 
-Review the current git diff for code quality and issues, for this project's actual stack:
-**Fastify HTTP API + Temporal TypeScript SDK workflow, Vitest, zod at the edges, pino
-logging.** No database, no DOM/frontend, no session-based auth — skip checklist items that
-don't apply to that shape rather than forcing a generic web-app checklist onto it.
+Review the current git diff for the things a generic reviewer can't know about **this** stack:
+Fastify + Temporal TypeScript SDK + Vitest + zod + pino, plus the Claude-backed activities.
+For general correctness and security use the built-in `/code-review` and `/security-review`;
+this command only adds the project-specific checks below.
 
 ## Steps
 
-1. Read the current git diff (or all of `src/` if reviewing the whole codebase).
-2. Check for security issues relevant to this stack (see checklist).
-3. Check for performance issues relevant to this stack.
-4. Check for error-handling and determinism issues specific to Temporal workflow code.
-5. Check for test coverage gaps, accounting for Temporal's workflow sandbox (see Notes).
-6. Output a structured summary.
+1. Read the current changes with `git diff HEAD` (staged + unstaged), or the files the user names.
+2. Go through the checks below, skipping any the diff cannot affect.
+3. Report findings in the format at the end.
 
-## Checklist
+## Checks
 
-1. **Security** — potential issues:
-   - Zod validation missing at an HTTP/signal/query boundary (request body, params, signal
-     payload)
-   - Secrets (Temporal Cloud API key, etc.) hardcoded, logged, or leaking through an
-     unredacted error path — check `pino`'s `redact` config covers the actual leak surface,
-     not just the happy-path field names
-   - CORS/security headers misconfigured (`@fastify/cors`, `@fastify/helmet`)
-   - Missing authorization/ownership check on a workflow-id-scoped endpoint (IDOR-style)
-   - Unauthenticated, unbounded endpoints that could be abused for resource exhaustion (no
-     rate limiting) — especially anything that starts a new workflow
+**Temporal workflow determinism** (`src/workflow/`)
 
-2. **Performance** — optimization opportunities:
-   - Unbounded loops or recursion (this app has none by design — flag any new one)
-   - Blocking/synchronous work inside a workflow or activity handler
-   - Repeated/redundant calls to the Temporal Client from a single HTTP request
+- No `Date.now()`, `Math.random()` or direct I/O in workflow code — that belongs in activities.
+- No `console`/pino in workflow code; log through `@temporalio/workflow`'s `log`.
+- Signal and query handlers stay synchronous: no sleeping, no activities.
+- `workflow/` imports nothing from `infra`, `activities`, `http` or `cli`.
+- A zod-invalid signal payload is logged and ignored, never thrown (a signal can't fail its sender).
 
-3. **Error handling & determinism** — Temporal-specific correctness, not generic
-   try/catch coverage:
-   - A process entrypoint (worker/API/CLI) that catches an error without setting
-     `process.exitCode`/rethrowing, silently reporting success to the supervisor on failure
-   - Non-deterministic calls (`Date.now()`, `Math.random()`, direct I/O) inside workflow
-     code — must go through activities instead
-   - Workflow code using `console.log`/pino directly instead of `@temporalio/workflow`'s
-     `log` (breaks replay determinism)
-   - Signal/query handlers that are async, sleep, or call activities (they must stay
-     synchronous)
-   - Zod-invalid signal payloads that aren't safely ignored/logged (a signal can't fail the
-     sender)
+**Boundaries and secrets**
 
-4. **Test coverage gaps** — testing deficiencies:
-   - New functions/branches without tests
-   - Untested error paths
-   - **Not a gap:** `workflow/agent-run.ts` and `workflow/agent.workflow.ts` run inside
-     Temporal's isolated workflow sandbox, which `v8` coverage cannot instrument regardless
-     of how thoroughly they're tested — low % there is expected (see `vitest.config.ts`'s
-     `coverage.exclude`). Verify these via `agent.workflow.test.ts`'s scenarios, not the
-     coverage number. Entrypoints (`worker.ts`, `http/server.ts`, `cli/client.ts`) are
-     intentionally verified via manual live smoke (`docs/PLAYBOOK.md`), not unit tests.
+- Zod validates every boundary: HTTP body/params, signal payloads, env (via `infra/config` only).
+- `ANTHROPIC_API_KEY` / `TEMPORAL_API_KEY` are never logged, echoed or put in error messages;
+  check pino's `redact` covers the actual leak path, not just the happy-path field.
+- A new env var is added to `infra/config`, `.env.example` and the README table.
+- A process entrypoint that catches an error sets `process.exitCode` or rethrows.
 
-## Severity levels
+**HTTP API** (`src/http/`)
 
-- **CRITICAL** — Must fix before merge (security, data loss risk)
-- **HIGH** — Should fix before merge (significant correctness/performance impact)
-- **MEDIUM** — Fix soon (code quality, maintainability)
-- **LOW** — Nice to have (minor improvements, style)
+- Stays a thin Temporal-client adapter: no business logic, imports only `workflow/contracts.ts`
+  (+ `agent.workflow.ts` to start) and `infra`.
+- Unexpected errors map to a generic `500 INTERNAL`; nothing internal leaks.
+- Helmet and CORS stay registered. An unauthenticated endpoint that starts workflows is accepted
+  scope (demo app, no auth by design) — note it, don't block on it, unless the diff changed that.
 
-## Output Format
+**Claude adapter** (`src/activities/claude-*`, `activities/index.ts`)
 
-For each finding, provide:
+- Transient failures (429, 5xx, connection) are rethrown; permanent ones (400/401/403/404/422,
+  refusal, truncation, empty output) are non-retryable `ApplicationFailure`s.
+- The client keeps `maxRetries: 0` and a timeout below `ACTIVITY_START_TO_CLOSE_MS`.
+- `claude-sonnet-5` requests send no `temperature`/`top_p`/`budget_tokens`/prefill, and set
+  `thinking: { type: 'disabled' }` explicitly.
+- Model output is validated with zod before use; user text stays in the escaped user turn, never
+  the system prompt; prompts and completions are not logged above `debug`.
 
-- The specific line(s) or function affected
-- Why it's a concern (show the issue)
-- Suggested fix (if applicable)
+**Tests**
 
-## Summary
+- New branches and error paths have tests; the mock provider stays the default and tests stay offline.
+- **Not a gap:** `workflow/agent-run.ts` and `workflow/agent.workflow.ts` run in Temporal's
+  sandbox, which v8 coverage can't instrument (see `vitest.config.ts` excludes) — they are covered
+  by `agent.workflow.test.ts`. Entrypoints and `cli/claude-check.ts` are verified by running them.
 
-```zsh
-## Code Review Summary
+## Output
 
-### Security
-| Severity | File | Issue | Suggestion |
-|----------|------|-------|------------|
-| ...      | ...  | ...   | ...        |
-
-### Performance
-| Severity | File | Issue | Suggestion |
-|----------|------|-------|------------|
-| ...      | ...  | ...   | ...        |
-
-### Error Handling & Determinism
-| Severity | File | Issue | Suggestion |
-|----------|------|-------|------------|
-| ...      | ...  | ...   | ...        |
-
-### Overall: PASS / NEEDS ATTENTION
-```
-
-## Notes
-
-- If no issues found in a category, say so plainly ("No issues found, this is safe to
-  merge").
-- This is a demo/test project with no auth layer by design — flag scope-relevant findings
-  (e.g. unauthenticated endpoints) explicitly as accepted scope rather than blocking on them,
-  unless the diff itself changed that scope.
-- Be specific about file paths and line numbers.
+For each finding: severity (**CRITICAL** must fix before merge · **HIGH** should fix before merge ·
+**MEDIUM** fix soon · **LOW** nice to have), `file:line`, why it matters, and a suggested fix.
+Group by the headings above, say plainly when a group has no issues, and end with
+**Overall: PASS / NEEDS ATTENTION**.

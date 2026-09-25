@@ -186,6 +186,7 @@ No dev server or worker needed.
 | `lint` / `lint:fix`                                  | ESLint                                                                    |
 | `format` / `format:check`                            | Prettier                                                                  |
 | `test` / `test:unit` / `test:feature` / `test:watch` | Vitest                                                                    |
+| `verify`                                             | format:check + lint + build + test (the full gate)                        |
 
 ## Tooling
 

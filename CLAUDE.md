@@ -39,16 +39,17 @@ A thin Temporal-client adapter — validate input, call the Client, no business 
 
 ## Commands
 
-| command                           | purpose                                                                       |
-| --------------------------------- | ----------------------------------------------------------------------------- |
-| `npm run worker`                  | run the worker (hosts workflows + activities)                                 |
-| `npm run api`                     | run the Fastify HITL REST API (`:3000`)                                       |
-| `npm run start`                   | CLI client — start one workflow, print its id, exit                           |
-| `npm run claude:check`            | check the Claude connection + short latency benchmark (real API, costs cents) |
-| `npm run build`                   | strict typecheck (`tsc --noEmit`)                                             |
-| `npm run lint` / `lint:fix`       | ESLint (check / auto-fix)                                                     |
-| `npm run format` / `format:check` | Prettier write / verify                                                       |
-| `npm test` / `npm run test:watch` | Vitest (single file: `npx vitest run <path>`)                                 |
+| command                           | purpose                                                                           |
+| --------------------------------- | --------------------------------------------------------------------------------- |
+| `npm run worker`                  | run the worker (hosts workflows + activities)                                     |
+| `npm run api`                     | run the Fastify HITL REST API (`:3000`)                                           |
+| `npm run start`                   | CLI client — start one workflow, print its id, exit                               |
+| `npm run claude:check`            | check the Claude connection + short latency benchmark (real API, costs cents)     |
+| `npm run build`                   | strict typecheck (`tsc --noEmit`)                                                 |
+| `npm run lint` / `lint:fix`       | ESLint (check / auto-fix)                                                         |
+| `npm run format` / `format:check` | Prettier write / verify                                                           |
+| `npm run verify`                  | everything the pre-commit gate does + tests: format:check, lint, build, test      |
+| `npm test` / `npm run test:watch` | Vitest (single file: `npx vitest run <path>`; coverage: `npm test -- --coverage`) |
 
 Manual runs need a local cluster: `temporal server start-dev` (gRPC `:7233`, Web UI `:8233`). Full run + HITL instructions live in the **`temporal-agent-ops`** skill.
 
@@ -73,5 +74,5 @@ The `temporal@temporal-marketplace` plugin is enabled (`.claude/settings.json`),
 ## Repo tooling
 
 - **MCP servers** (`.mcp.json`): `context7` only.
-- **Slash commands** (`.claude/commands/`): `/verify`, `/review`, `/test-coverage` — written for this project's stack (Fastify + Temporal + Vitest); coverage analysis respects `vitest.config.ts`'s intentional excludes.
+- **Slash commands** (`.claude/commands/`): `/review` only — the project-specific checks (Temporal determinism, boundaries, HTTP rules, Claude adapter). For generic review use the built-in `/code-review` / `/security-review`; run `npm run verify` instead of a verify command. Coverage excludes are explained in `vitest.config.ts`.
 - **Formatting** is handled by the husky `pre-commit`, not a `PostToolUse` hook.
