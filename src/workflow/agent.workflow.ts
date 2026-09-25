@@ -6,7 +6,7 @@
  * its pipeline. Depends on the `AiToolsActivities` port (never on infra); all non-determinism
  * lives in activities; signal handlers are non-async and only mutate local state.
  *
- * State machine (SPEC §6): plan → await approval → (reject → re-plan, up to MAX_REJECTIONS) →
+ * State machine (see CLAUDE.md, Workflow rules): plan → await approval → (reject → re-plan, up to MAX_REJECTIONS) →
  * execute steps → synthesize → complete. A `cancel` signal ends the run from any wait point.
  */
 

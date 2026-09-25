@@ -4,7 +4,7 @@
  * are injected into `execute()` rather than proxied here, which keeps the class decoupled from
  * the Temporal worker wiring and directly testable with fake activities.
  *
- * State machine (SPEC §6): plan → await approval → (reject → re-plan, up to MAX_REJECTIONS) →
+ * State machine (see CLAUDE.md, Workflow rules): plan → await approval → (reject → re-plan, up to MAX_REJECTIONS) →
  * execute steps → synthesize → complete. A `cancel` signal ends the run from any wait point.
  */
 
