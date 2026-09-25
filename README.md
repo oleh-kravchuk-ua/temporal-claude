@@ -18,9 +18,13 @@ stateDiagram-v2
     synthesizing --> completed
     awaiting_approval --> cancelled: cancel
     executing --> cancelled: cancel
+    planning --> failed: activity fails for good
+    executing --> failed: activity fails for good
+    synthesizing --> failed: activity fails for good
     completed --> [*]
     rejected --> [*]
     cancelled --> [*]
+    failed --> [*]
 ```
 
 ## Architecture
@@ -179,8 +183,11 @@ Good to know:
 - **Speed** (Sonnet 5): plan ≈ 5 s, each step ≈ 8 s, synthesis ≈ 8 s, so a run takes roughly
   30–60 s after approval. `LOG_LEVEL=debug` shows per-call `durationMs` and token counts.
 - **Failures:** rate limits, 5xx and timeouts are retried (3 attempts, 1-minute limit each). A
-  refusal or a truncated/empty answer is permanent and fails the run. Rejecting a plan with
-  feedback sends that feedback to Claude, which re-plans accordingly.
+  refusal, a bad key or a truncated/empty answer is permanent. Either way, when an activity
+  finally fails the run ends **`failed`**: `GET /agents/:id` shows `status: "failed"` and a short
+  `error` (your own adapters' safe message, or a generic "Activity … failed (…)" — never the raw
+  upstream text), and Temporal shows the workflow as Failed with the details in its history.
+  Rejecting a plan with feedback sends that feedback to Claude, which re-plans accordingly.
 
 ## Configuration
 

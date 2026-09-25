@@ -94,6 +94,17 @@ approve "$ID" true
 state "$ID"                 # step outputs include "(guidance: prefer recent sources)"
 ```
 
+### A run that fails (visible in the API, not stuck)
+
+Use a bad key so Claude answers `401` (permanent, so there are no retries):
+
+```bash
+AI_PROVIDER=claude ANTHROPIC_API_KEY=invalid npm run worker      # instead of the normal worker
+ID=$(start "this will fail")
+sleep 3; state "$ID"        # status: failed, error: "Claude API rejected the request (HTTP 401 …)"
+temporal workflow describe -w "$ID"     # Status FAILED — same outcome, details in the history
+```
+
 ### Same workflow, three clients
 
 - **CLI client:** `npm run start -- "my topic"` — starts a run and prints how to approve it.

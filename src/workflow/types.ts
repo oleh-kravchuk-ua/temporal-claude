@@ -25,7 +25,11 @@ export interface StepResult {
   readonly output: string;
 }
 
-/** Lifecycle status of an agent run. `rejected`/`completed`/`cancelled` are terminal. */
+/**
+ * Lifecycle status of an agent run. `rejected`/`completed`/`cancelled`/`failed` are terminal.
+ * `failed` means an activity failed for good (permanent error or retries exhausted); the
+ * workflow itself also ends FAILED in Temporal.
+ */
 export type AgentStatus =
   | 'planning'
   | 'awaiting_approval'
@@ -33,7 +37,8 @@ export type AgentStatus =
   | 'synthesizing'
   | 'completed'
   | 'rejected'
-  | 'cancelled';
+  | 'cancelled'
+  | 'failed';
 
 /** A snapshot of an agent run, exposed via the workflow's `getState` query. */
 export interface AgentState {
@@ -42,11 +47,13 @@ export interface AgentState {
   /** Increments on each (re)plan; starts at 1. */
   readonly revision: number;
   readonly plan?: Plan;
-  /** Set while `status === 'executing'`. */
+  /** Set while `status === 'executing'`; left set on `failed` to show which step failed. */
   readonly currentStepId?: number;
   readonly results: readonly StepResult[];
   /** Accumulated mid-run guidance from `provideGuidance`. */
   readonly guidance: readonly string[];
   /** Set on `status === 'completed'`. */
   readonly finalAnswer?: string;
+  /** Set on `status === 'failed'`: a short, client-safe reason (see `failure-message.ts`). */
+  readonly error?: string;
 }

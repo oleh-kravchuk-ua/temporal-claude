@@ -6,6 +6,7 @@
 
 import { fileURLToPath } from 'node:url';
 
+import { ApplicationFailure } from '@temporalio/activity';
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker, bundleWorkflowCode, type WorkflowBundle } from '@temporalio/worker';
 import type { FastifyInstance } from 'fastify';
@@ -14,6 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { pino } from 'pino';
 
 import { createAiToolsActivities } from '../src/activities';
+import type { AiToolsActivities } from '../src/workflow/ports';
 import { buildApp } from '../src/http/app';
 
 const TASK_QUEUE = 'test';
@@ -141,5 +143,61 @@ describe('HTTP API (e2e)', () => {
     expect(cancelled.statusCode).toBe(202);
 
     expect(await poll(workflowId, (s) => s === 'cancelled')).toBe('cancelled');
+  });
+});
+
+describe('HTTP API (e2e) — a run whose activity fails permanently', () => {
+  const FAILING_QUEUE = 'test-failing';
+  let failingWorker: Worker;
+  let failingRun: Promise<void>;
+  let failingApp: FastifyInstance;
+
+  beforeAll(async () => {
+    const bundle: WorkflowBundle = await bundleWorkflowCode({
+      workflowsPath: fileURLToPath(new URL('../src/workflow/agent.workflow.ts', import.meta.url)),
+    });
+    const activities: AiToolsActivities = {
+      ...createAiToolsActivities(pino({ level: 'silent' })),
+      planTask: () =>
+        Promise.reject(
+          ApplicationFailure.nonRetryable('Claude API rejected the request (HTTP 401)', 'Test'),
+        ),
+    };
+    failingWorker = await Worker.create({
+      connection: env.nativeConnection,
+      taskQueue: FAILING_QUEUE,
+      workflowBundle: bundle,
+      activities,
+    });
+    failingRun = failingWorker.run();
+    failingApp = await buildApp({ client: env.client, taskQueue: FAILING_QUEUE, corsOrigin: '*' });
+    await failingApp.ready();
+  }, 60_000);
+
+  afterAll(async () => {
+    failingWorker.shutdown();
+    await failingRun;
+    await failingApp.close();
+  });
+
+  it('GET /agents/:id reports failed (not a stuck "planning") and says why', async () => {
+    const started = await failingApp.inject({
+      method: 'POST',
+      url: '/agents',
+      payload: { topic: 'this run fails' },
+    });
+    const { workflowId } = started.json<DataBody<{ workflowId: string }>>().data;
+
+    let body: DataBody<{ status: string; error?: string }> | undefined;
+    for (let i = 0; i < 100; i++) {
+      const res = await failingApp.inject({ method: 'GET', url: `/agents/${workflowId}` });
+      expect(res.statusCode).toBe(200);
+      body = res.json<DataBody<{ status: string; error?: string }>>();
+      if (body.data.status !== 'planning') break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    expect(body?.data.status).toBe('failed');
+    expect(body?.data.error).toBe('Claude API rejected the request (HTTP 401)');
   });
 });
