@@ -147,7 +147,8 @@ describe('HTTP API (e2e)', () => {
 });
 
 describe('HTTP API (e2e) — a run whose activity fails permanently', () => {
-  const FAILING_QUEUE = 'test-failing';
+  // The prefix keeps this run's expected error out of the test output (see vitest.setup.ts).
+  const FAILING_QUEUE = 'expected-failure-http';
   let failingWorker: Worker;
   let failingRun: Promise<void>;
   let failingApp: FastifyInstance;
