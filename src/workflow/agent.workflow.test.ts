@@ -222,6 +222,12 @@ describe('agentWorkflow', () => {
   });
 
   describe('activity failures', () => {
+    // These runs fail on purpose; the prefix keeps their expected error out of the test output
+    // (see vitest.setup.ts).
+    beforeEach(() => {
+      taskQueue = `expected-failure-${randomUUID()}`;
+    });
+
     /** The workflow still ends FAILED in Temporal; what matters is that the query says so too. */
     const failedState = async (handle: Handle): Promise<AgentState> => {
       await expect(handle.result()).rejects.toThrow();
