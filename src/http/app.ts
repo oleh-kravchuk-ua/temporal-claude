@@ -27,7 +27,6 @@ export const buildApp = async (deps: BuildAppDeps): Promise<FastifyInstance> => 
   const app = Fastify({
     logger: deps.logger ?? false,
     // One line per request (below) instead of Fastify's default incoming/completed pair.
-    // (The top-level `disableRequestLogging` option is deprecated in favour of a LogController.)
     logController: new LogController({ disableRequestLogging: true }),
     // Correlate with an inbound `x-request-id` when present, else a fresh uuid.
     requestIdHeader: 'x-request-id',
