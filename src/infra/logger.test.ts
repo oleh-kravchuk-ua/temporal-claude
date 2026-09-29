@@ -35,9 +35,11 @@ describe('logger redaction', () => {
   });
 
   it('keeps non-secret fields readable', () => {
-    const output = logged({ ai: { provider: 'claude', model: 'claude-sonnet-5', apiKey: SECRET } });
+    const output = logged({
+      ai: { provider: 'claude', model: 'claude-model', apiKey: SECRET },
+    });
 
-    expect(output).toContain('claude-sonnet-5');
+    expect(output).toContain('claude-model');
     expect(output).toContain('[Redacted]');
   });
 });

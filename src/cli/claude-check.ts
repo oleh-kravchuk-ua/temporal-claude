@@ -55,7 +55,7 @@ const run = async (): Promise<void> => {
     const reply = await client.messages.create({
       model: ai.model,
       max_tokens: 16,
-      thinking: { type: 'disabled' },
+      thinking: { type: 'between_tools' },
       messages: [{ role: 'user', content: 'Reply with the single word: OK' }],
     });
     const ms = Math.round(performance.now() - checkStartedAt);

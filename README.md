@@ -169,7 +169,7 @@ By default the agent uses the offline mock. To use Claude instead:
    ```bash
    AI_PROVIDER=claude
    ANTHROPIC_API_KEY=sk-ant-...
-   # ANTHROPIC_MODEL=claude-sonnet-5   # optional override
+   # ANTHROPIC_MODEL=claude-sonnet-5-5   # optional override
    ```
 
 3. Check the connection and see typical latency: `npm run claude:check`.
@@ -196,19 +196,19 @@ All config flows through `src/infra/config` (the only reader of `process.env`), 
 into a frozen `AppConfig`. Precedence: real env → `.env.local` → `.env` → built-in defaults —
 so it **runs with no env files at all**. Copy `.env.example` to `.env` to customize.
 
-| Variable                  | Default            | Purpose                                                                  |
-| ------------------------- | ------------------ | ------------------------------------------------------------------------ |
-| `TEMPORAL_ADDRESS`        | `localhost:7233`   | Temporal gRPC endpoint                                                   |
-| `TEMPORAL_NAMESPACE`      | `default`          | namespace                                                                |
-| `TEMPORAL_TASK_QUEUE`     | `ai-agent`         | task queue the worker polls / clients target                             |
-| `TEMPORAL_API_KEY`        | —                  | set in `.env.local` for Temporal Cloud (enables TLS)                     |
-| `HTTP_PORT` / `HTTP_HOST` | `3000` / `0.0.0.0` | REST API bind                                                            |
-| `CORS_ORIGIN`             | `*`                | allowed CORS origin                                                      |
-| `LOG_LEVEL`               | `info`             | pino level                                                               |
-| `NODE_ENV`                | `development`      | `production` → JSON logs                                                 |
-| `AI_PROVIDER`             | `mock`             | `mock` (offline) or `claude` (real API)                                  |
-| `ANTHROPIC_API_KEY`       | —                  | required when `AI_PROVIDER=claude`; set in `.env.local`, never commit it |
-| `ANTHROPIC_MODEL`         | `claude-sonnet-5`  | model used when `AI_PROVIDER=claude`                                     |
+| Variable                  | Default             | Purpose                                                                                                       |
+| ------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `TEMPORAL_ADDRESS`        | `localhost:7233`    | Temporal gRPC endpoint                                                                                        |
+| `TEMPORAL_NAMESPACE`      | `default`           | namespace                                                                                                     |
+| `TEMPORAL_TASK_QUEUE`     | `ai-agent`          | task queue the worker polls / clients target                                                                  |
+| `TEMPORAL_API_KEY`        | —                   | set in `.env.local` for Temporal Cloud (enables TLS)                                                          |
+| `HTTP_PORT` / `HTTP_HOST` | `3000` / `0.0.0.0`  | REST API bind                                                                                                 |
+| `CORS_ORIGIN`             | `*`                 | allowed CORS origin                                                                                           |
+| `LOG_LEVEL`               | `info`              | pino level                                                                                                    |
+| `NODE_ENV`                | `development`       | `production` → JSON logs                                                                                      |
+| `AI_PROVIDER`             | `mock`              | `mock` (offline) or `claude` (real API)                                                                       |
+| `ANTHROPIC_API_KEY`       | —                   | required when `AI_PROVIDER=claude`; set in `.env.local`, never commit it                                      |
+| `ANTHROPIC_MODEL`         | `claude-sonnet-5-5` | model used when `AI_PROVIDER=claude` (source of truth: `DEFAULT_CLAUDE_MODEL` in `src/infra/config/types.ts`) |
 
 `AppConfig` is grouped by concern (`http.*`, `temporal.connection.*`, `temporal.taskQueue`,
 `ai.*`); the flat env vars above map onto it. With `AI_PROVIDER=claude` and no key, startup

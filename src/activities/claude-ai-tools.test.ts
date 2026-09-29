@@ -14,7 +14,9 @@ import {
 } from './claude-ai-tools';
 import { PLANNER_SYSTEM, STEP_MAX_WORDS, STEP_SYSTEM, SYNTHESIS_SYSTEM } from './claude-prompts';
 
-const MODEL = 'claude-sonnet-5';
+// Arbitrary — this suite tests that whatever model is configured flows into the request,
+// not any particular model's real behavior, so it need not track the app's actual default.
+const MODEL = 'claude-test-model';
 const headers = new Headers();
 
 const reply = (text: string, overrides: Partial<ClaudeResponse> = {}): ClaudeResponse => ({
@@ -113,14 +115,14 @@ describe('planTask', () => {
     expect(request.model).toBe(MODEL);
     expect(request.max_tokens).toBe(2048);
     expect(request.system).toBe(PLANNER_SYSTEM);
-    expect(request.thinking).toEqual({ type: 'disabled' });
+    expect(request.thinking).toEqual({ type: 'between_tools' });
     expect(request.output_config?.format?.type).toBe('json_schema');
     expect(request.messages).toHaveLength(1);
     expect(request.messages[0]?.role).toBe('user');
     expect(userText(request)).toContain('<topic>temporal vs cron</topic>');
   });
 
-  it('never sends parameters that claude-sonnet-5 rejects', async () => {
+  it('never sends sampling params or prefill (rejected by the configured model)', async () => {
     const fake = replying(planJson());
 
     await tools(fake).planTask('t');
@@ -265,7 +267,7 @@ describe('runTool', () => {
     expect(request.model).toBe(MODEL);
     expect(request.system).toBe(STEP_SYSTEM);
     expect(request.max_tokens).toBe(2048);
-    expect(request.thinking).toEqual({ type: 'disabled' });
+    expect(request.thinking).toEqual({ type: 'between_tools' });
     expect(request.output_config?.effort).toBe('low');
     expect(request.output_config?.format).toBeUndefined();
     expect(userText(request)).toContain('<tool>summarize</tool>');
@@ -282,7 +284,7 @@ describe('runTool', () => {
     expect(userText(fake.request())).toContain('be concise');
   });
 
-  it('never sends parameters that claude-sonnet-5 rejects', async () => {
+  it('never sends sampling params or prefill (rejected by the configured model)', async () => {
     const fake = replying('ok');
 
     await tools(fake).runTool(step, []);
@@ -332,7 +334,7 @@ describe('synthesize', () => {
 
     expect(request.system).toBe(SYNTHESIS_SYSTEM);
     expect(request.max_tokens).toBe(4096);
-    expect(request.thinking).toEqual({ type: 'disabled' });
+    expect(request.thinking).toEqual({ type: 'between_tools' });
     expect(request.output_config?.format).toBeUndefined();
     expect(prompt).toContain('<topic>durable execution</topic>');
     expect(prompt.indexOf('first output')).toBeGreaterThan(-1);
