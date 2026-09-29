@@ -5,8 +5,10 @@
  * network. The real client is built in `activities/index.ts` with `maxRetries: 0`: Temporal
  * owns retries, and `claude-errors.ts` says which failures are worth retrying.
  *
- * Only `thinking: { type: 'disabled' }` is sent for reasoning control, and no sampling
- * parameters: `claude-sonnet-5` rejects those with a 400.
+ * Only `thinking: { type: 'between_tools' }` is sent for reasoning control — the model's lowest
+ * thinking setting (`claude-sonnet-5-5` rejects `disabled`, the setting Sonnet 5 used; see
+ * CLAUDE.md's Claude adapter notes) — and no sampling parameters: `claude-sonnet-5-5` rejects
+ * those with a 400.
  */
 
 import type {
@@ -91,7 +93,7 @@ export const createClaudeAiTools = (
       response = await client.messages.create({
         model,
         ...rest,
-        thinking: { type: 'disabled' },
+        thinking: { type: 'between_tools' },
         messages: [{ role: 'user', content: prompt }],
       });
     } catch (error) {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { loadConfig } from './index';
-import { type AppConfig } from './types';
+import { DEFAULT_CLAUDE_MODEL, type AppConfig } from './types';
 
 describe('loadConfig', () => {
   it('returns defaults for an empty environment (runs with no env files)', () => {
@@ -23,7 +23,7 @@ describe('loadConfig', () => {
       logLevel: 'info',
       ai: {
         provider: 'mock',
-        model: 'claude-sonnet-5',
+        model: DEFAULT_CLAUDE_MODEL,
       },
     };
 
@@ -76,7 +76,7 @@ describe('loadConfig — ai', () => {
     const { ai } = loadConfig({});
 
     expect(ai.provider).toBe('mock');
-    expect(ai.model).toBe('claude-sonnet-5');
+    expect(ai.model).toBe(DEFAULT_CLAUDE_MODEL);
     expect(ai.apiKey).toBeUndefined();
   });
 

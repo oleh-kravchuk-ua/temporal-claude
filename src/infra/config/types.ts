@@ -11,6 +11,21 @@ export type RawEnv = Record<string, string | undefined>;
 
 import { z } from 'zod';
 
+/**
+ * The default `ANTHROPIC_MODEL`. The ONLY place this literal is allowed to appear — everything
+ * else (tests, docs) either imports it or uses an unrelated placeholder model string.
+ *
+ * Anthropic's model IDs are permanently pinned snapshots by design (no "evergreen" alias exists
+ * that quietly moves forward when a new model ships — see
+ * https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions), so this value
+ * WILL need a manual bump when adopting a newer model. When it does, that is rarely just a
+ * string swap: re-check `activities/claude-ai-tools.ts`'s request-shaping assumptions (accepted
+ * `thinking`/`effort` values, sampling params) against the new model's docs, bump
+ * `@anthropic-ai/sdk` if its types don't have a config it needs yet, then verify live with
+ * `npm run claude:check` before trusting it. See CLAUDE.md's "Claude adapter" section.
+ */
+export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5-5';
+
 export const AppConfigSchema = z.object({
   nodeEnv: z.enum(['development', 'test', 'production']).default('development'),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -31,7 +46,7 @@ export const AppConfigSchema = z.object({
     .object({
       /** Which `AiToolsActivities` strategy the worker registers. */
       provider: z.enum(['mock', 'claude']).default('mock'),
-      model: z.string().min(1).default('claude-sonnet-5'),
+      model: z.string().min(1).default(DEFAULT_CLAUDE_MODEL),
       /** Only read when `provider` is `claude`; never logged. */
       apiKey: z.string().min(1).optional(),
     })

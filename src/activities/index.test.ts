@@ -40,7 +40,8 @@ describe('createAiToolsActivities', () => {
   it('uses the mock strategy for provider=mock, even if a key is present', async () => {
     const activities = createAiToolsActivities(logger, {
       provider: 'mock',
-      model: 'claude-sonnet-5',
+      // Any model string is fine here — the point of this test is that provider=mock ignores it.
+      model: 'claude-test-model',
       apiKey: 'sk-test',
     });
 
@@ -65,7 +66,7 @@ describe('createAiToolsActivities', () => {
 
   it('refuses to build the Claude strategy without a key', () => {
     expect(() =>
-      createAiToolsActivities(logger, { provider: 'claude', model: 'claude-sonnet-5' }),
+      createAiToolsActivities(logger, { provider: 'claude', model: 'claude-test-model' }),
     ).toThrow(/ANTHROPIC_API_KEY/);
   });
 });
